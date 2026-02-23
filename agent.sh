@@ -217,6 +217,17 @@ summarize_result() {
         write)
             echo "ok ${line_count}ln"
             ;;
+        search)
+            # Extract title and snippet for LLM context
+            local title snippet
+            title="$(printf '%s' "$raw" | jq -r '.[0].title // empty' 2>/dev/null)"
+            snippet="$(printf '%s' "$raw" | jq -r '.[0].snippet // empty' 2>/dev/null)"
+            if [ -n "$title" ]; then
+                echo "$title: $snippet"
+            else
+                echo "$raw" | head -3
+            fi
+            ;;
         *)
             echo "$raw" | head -5
             ;;
@@ -297,6 +308,15 @@ exec_tool() {
                 output="err($exit_code): $first_line"
             fi
             ;;
+        search)
+            local query
+            query="$(printf '%s' "$args_json" | jq -r '.query // empty')"
+            if [ -z "$query" ]; then
+                echo "err: no query specified"
+                return 1
+            fi
+            output="$(bash "$SCRIPT_DIR/search.sh" "$query")" || exit_code=$?
+            ;;
         *)
             echo "err: unknown tool: $tool"
             return 1
@@ -350,6 +370,9 @@ get_display_text() {
             ;;
         shell)
             echo "$(echo "$args_json" | jq -r '.cmd // "?"')"
+            ;;
+        search)
+            echo "$(printf '%s' "$args_json" | jq -r '.query // "?"')"
             ;;
     esac
 }
@@ -628,6 +651,7 @@ handle_builtin() {
             echo "  read(path)          — read file"
             echo "  write(path,content) — write file"
             echo "  shell(cmd)          — run command"
+            echo "  search(query)       — web search"
             return 0
             ;;
         /log)

@@ -148,6 +148,13 @@ assert_contains "shell failed command returns error" "err(" "$out"
 out="$(exec_tool "shell" '{}')"
 assert_contains "shell no cmd returns error" "err:" "$out"
 
+# search tool
+out="$(exec_tool "search" '{"query":"test"}')"
+assert_rc "search returns success" 0 $?
+
+out="$(exec_tool "search" '{}')"
+assert_contains "search no query returns error" "err:" "$out"
+
 # unknown tool
 out="$(exec_tool "unknown" '{}')"
 assert_contains "unknown tool returns error" "err:" "$out"
@@ -159,7 +166,7 @@ echo "build_extract_prompt"
 out="$(build_extract_prompt "list files" "prev result")"
 assert_contains "extract prompt includes request" "list files" "$out"
 assert_contains "extract prompt includes last result" "prev result" "$out"
-assert_contains "extract prompt includes search tool" "search.sh" "$out"
+assert_contains "extract prompt includes search tool" "search(query)" "$out"
 
 # ── Tests: build_order_prompt ───────────────────────────
 echo ""
@@ -199,6 +206,9 @@ assert_eq "get_display_text shell shows cmd" "ls -la" "$out"
 
 out="$(get_display_text "write" '{"path":"/tmp/out.txt","content":"abc"}')"
 assert_contains "get_display_text write shows path" "/tmp/out.txt" "$out"
+
+out="$(get_display_text "search" '{"query":"test query"}')"
+assert_eq "get_display_text search shows query" "test query" "$out"
 
 # ── Tests: log_event ────────────────────────────────────
 echo ""
