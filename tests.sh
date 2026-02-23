@@ -363,6 +363,37 @@ count="$(wc -l < "$SCRIPT_DIR/blocklist.txt" | tr -d ' ')"
 [ "$count" -ge 5 ]
 assert_rc "blocklist has at least 5 patterns" 0 $?
 
+# ── Tests: cache helpers ──────────────────────────────
+echo ""
+echo "cache helpers"
+
+CACHE_DIR="$TEST_TMP/.cache"
+cache_set "test query" '{"answer":"cached","url":"http://x.com"}'
+out="$(cache_get "test query")"
+assert_eq "cache_get returns cached value" '{"answer":"cached","url":"http://x.com"}' "$out"
+
+cache_get "nonexistent query" > /dev/null 2>&1
+assert_rc "cache_get returns 1 for miss" 1 $?
+
+out="$(cache_get "TEST QUERY")"
+assert_eq "cache_get is case-insensitive" '{"answer":"cached","url":"http://x.com"}' "$out"
+
+# ── Tests: build_plan_prompt ──────────────────────────
+echo ""
+echo "build_plan_prompt"
+
+out="$(build_plan_prompt "list files" "prev result")"
+assert_contains "plan prompt includes request" "list files" "$out"
+assert_contains "plan prompt includes last result" "prev result" "$out"
+assert_contains "plan prompt includes plan key" '"plan"' "$out"
+
+# ── Tests: plan.gbnf exists ──────────────────────────
+echo ""
+echo "plan.gbnf"
+
+[ -s "$SCRIPT_DIR/grammars/plan.gbnf" ]
+assert_rc "plan.gbnf exists and non-empty" 0 $?
+
 # ── Results ─────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
