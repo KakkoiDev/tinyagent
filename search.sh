@@ -41,16 +41,15 @@ BEGIN { n=0; in_sponsored=0; title=""; url=""; ORS="" }
     getline snippet_line
     gsub(/^[[:space:]]+|[[:space:]]+$/, "", snippet_line)
     gsub(/<[^>]+>/, "", snippet_line)  # strip HTML tags
-    # Decode HTML entities
+    # Decode HTML entities first
     gsub(/&#x27;/, "'\''", snippet_line); gsub(/&#x27;/, "'\''", title)
-    gsub(/&#92;/, "\\", snippet_line); gsub(/&#92;/, "\\", title)
+    gsub(/&#92;/, "", snippet_line); gsub(/&#92;/, "", title)
     gsub(/&amp;/, "\\&", snippet_line); gsub(/&amp;/, "\\&", title)
     gsub(/&lt;/, "<", snippet_line); gsub(/&lt;/, "<", title)
     gsub(/&gt;/, ">", snippet_line); gsub(/&gt;/, ">", title)
-    # Escape JSON quotes
-    gsub(/"/, "\\\"", snippet_line)
-    gsub(/"/, "\\\"", title)
-    gsub(/"/, "\\\"", url)
+    # JSON-escape: quotes and backslashes
+    gsub(/\\/, "\\\\", snippet_line); gsub(/\\/, "\\\\", title)
+    gsub(/"/, "\\\"", snippet_line); gsub(/"/, "\\\"", title); gsub(/"/, "\\\"", url)
 
     if (n == 0) print "["
     else print ","
