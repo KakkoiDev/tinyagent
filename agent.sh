@@ -496,50 +496,77 @@ confirm_and_exec_step() {
     done
 }
 
-# ── Question detection (fast-path for search) ─────────
-is_search_question() {
+# ── Input classification (fast-path routing) ──────────
+classify_input() {
     local input="$1"
     local lower
     lower="$(echo "$input" | tr '[:upper:]' '[:lower:]')"
-    # Skip if it looks locally answerable
-    case "$lower" in
-        *time*|*date*|*disk*|*space*|*files*|*directory*|*size*|*memory*|*cpu*|*process*|*running*|*uptime*) return 1 ;;
-    esac
-    # Match question words with typo tolerance (prefix matching)
-    # "how" → ho, "what" → wh/wha, "who" → wh, "why" → wh
     local first rest
     first="${lower%% *}"
     rest="${lower#* }"
+
+    # ── read: "read/show/cat/open/view" + path-like token ──
     case "$first" in
-        ho|how|hw|hiw|hoe)
-            # "how to/do/does" patterns
-            case "$rest" in
-                to\ *|do\ *|does\ *|too\ *|2\ *) return 0 ;;
-            esac
+        read|show|cat|open|view)
+            if echo "$rest" | grep -qE '[a-zA-Z0-9_./-]+\.[a-zA-Z]+|/[a-zA-Z]'; then
+                echo "read"; return
+            fi
             ;;
-        wh|wha|what|waht|whta|wat|wht)
-            case "$rest" in
-                is\ *|are\ *|si\ *) return 0 ;;
-            esac
+    esac
+
+    # ── write: "write/create/save" + path-like token ──
+    case "$first" in
+        write|create|save)
+            if echo "$rest" | grep -qE '[a-zA-Z0-9_./-]+\.[a-zA-Z]+|/[a-zA-Z]'; then
+                echo "write"; return
+            fi
             ;;
-        who|woh|hwo)
-            case "$rest" in
-                is\ *|si\ *) return 0 ;;
+    esac
+
+    # ── shell: "run/execute/exec" or bare shell command ──
+    case "$first" in
+        run|execute|exec)
+            echo "shell"; return ;;
+        ls|cd|pwd|mkdir|rmdir|cp|mv|rm|touch|chmod|chown|grep|find|ps|kill|df|du|top|free|uname|whoami|hostname|ping|curl|wget|git|docker|npm|node|python|python3|pip|make|cmake|gcc|clang|cargo|go|java|javac)
+            echo "shell"; return ;;
+    esac
+
+    # ── search: question words with typo tolerance ──
+    # Skip if it looks locally answerable
+    case "$lower" in
+        *time*|*date*|*disk*|*space*|*files*|*directory*|*size*|*memory*|*cpu*|*process*|*running*|*uptime*) ;;
+        *)
+            case "$first" in
+                ho|how|hw|hiw|hoe)
+                    case "$rest" in
+                        to\ *|do\ *|does\ *|too\ *|2\ *) echo "search"; return ;;
+                    esac
+                    ;;
+                wh|wha|what|waht|whta|wat|wht)
+                    case "$rest" in
+                        is\ *|are\ *|si\ *) echo "search"; return ;;
+                    esac
+                    ;;
+                who|woh|hwo)
+                    case "$rest" in
+                        is\ *|si\ *) echo "search"; return ;;
+                    esac
+                    ;;
+                why|whi|wyh)
+                    case "$rest" in
+                        does\ *|is\ *|do\ *) echo "search"; return ;;
+                    esac
+                    ;;
             esac
-            ;;
-        why|whi|wyh)
-            case "$rest" in
-                does\ *|is\ *|do\ *) return 0 ;;
+            # Fallback: ends with ? and has 4+ words
+            local word_count
+            word_count="$(echo "$lower" | wc -w | tr -d ' ')"
+            case "$input" in
+                *\?) [ "$word_count" -ge 4 ] && { echo "search"; return; } ;;
             esac
             ;;
     esac
-    # Fallback: ends with ? and has 4+ words (likely a web question, not a local command)
-    local word_count
-    word_count="$(echo "$lower" | wc -w | tr -d ' ')"
-    case "$input" in
-        *\?) [ "$word_count" -ge 4 ] && return 0 ;;
-    esac
-    return 1
+    # Empty → model fallback
 }
 
 # ── Spellcheck ─────────────────────────────────────────
@@ -577,12 +604,30 @@ process_input() {
 
     log_event "user_input" "$(jq -n --arg req "$request" '{request: $req}')"
 
-    # Fast-path: web-lookup questions go directly to search (skip model extract + order)
-    if is_search_question "$request"; then
-        log_event "fast_path" '{"type":"search"}'
+    # Fast-path: pattern-matched inputs skip model call entirely
+    local classification
+    classification="$(classify_input "$request")"
+    if [ -n "$classification" ]; then
+        log_event "fast_path" "$(jq -n --arg t "$classification" '{type:$t}')"
         local args_json
-        args_json="$(jq -n --arg q "$request" '{query:$q}')"
-        confirm_and_exec_step 1 1 "search" "$args_json"
+        case "$classification" in
+            search)
+                args_json="$(jq -n --arg q "$request" '{query:$q}')" ;;
+            read)
+                local path
+                path="$(echo "$request" | grep -oE '[a-zA-Z0-9_./-]+\.[a-zA-Z]+|/[a-zA-Z][a-zA-Z0-9_./-]*' | head -1)"
+                args_json="$(jq -n --arg p "$path" '{path:$p}')" ;;
+            write)
+                local path
+                path="$(echo "$request" | grep -oE '[a-zA-Z0-9_./-]+\.[a-zA-Z]+|/[a-zA-Z][a-zA-Z0-9_./-]*' | head -1)"
+                args_json="$(jq -n --arg p "$path" --arg c "" '{path:$p,content:$c}')" ;;
+            shell)
+                local cmd="$request"
+                # Strip leading "run/execute/exec " prefix
+                cmd="$(echo "$cmd" | sed 's/^[Rr]un \|^[Ee]xecute \|^[Ee]xec //')"
+                args_json="$(jq -n --arg c "$cmd" '{cmd:$c}')" ;;
+        esac
+        confirm_and_exec_step 1 1 "$classification" "$args_json"
         return
     fi
 
@@ -798,9 +843,21 @@ handle_builtin() {
 run_query() {
     local input="$1"
     mkdir -p "$LOG_DIR"
+
+    # Fast-path: classify without model
+    local classification
+    classification="$(classify_input "$input")"
+    if [ "$classification" = "search" ]; then
+        start_server
+        local result
+        result="$(exec_tool "search" "$(jq -n --arg q "$input" '{query:$q}')")"
+        format_output "$result"
+        return
+    fi
+
     start_server
 
-    # Build extract prompt and get tool calls
+    # Model fallback
     local prompt
     prompt="$(build_extract_prompt "$input" "$LAST_RESULT")"
     local raw_output

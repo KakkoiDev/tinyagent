@@ -288,59 +288,48 @@ else
     echo "  SKIP: aspell not installed"
 fi
 
-# ── Tests: is_search_question ──────────────────────────
+# ── Tests: classify_input ──────────────────────────────
 echo ""
-echo "is_search_question"
+echo "classify_input"
 
-# Correct spelling
-is_search_question "how to install nodejs?"
-assert_rc "detects 'how to' search question" 0 $?
+# Search patterns (correct spelling)
+assert_eq "classifies 'how to' as search" "search" "$(classify_input "how to install nodejs?")"
+assert_eq "classifies 'what is' as search" "search" "$(classify_input "what is rust?")"
+assert_eq "classifies 'who is' as search" "search" "$(classify_input "who is linus torvalds?")"
+assert_eq "classifies 'how does' as search" "search" "$(classify_input "how does docker work?")"
+assert_eq "classifies 'why does' as search" "search" "$(classify_input "why does rust use ownership?")"
 
-is_search_question "what is rust?"
-assert_rc "detects 'what is' search question" 0 $?
+# Search typos
+assert_eq "classifies typo 'hw to' as search" "search" "$(classify_input "hw to install nodejs?")"
+assert_eq "classifies typo 'waht is' as search" "search" "$(classify_input "waht is kubernetes?")"
+assert_eq "classifies typo 'hoe to' as search" "search" "$(classify_input "hoe to install docker?")"
+assert_eq "classifies typo 'woh is' as search" "search" "$(classify_input "woh is linus torvalds?")"
 
-is_search_question "who is linus torvalds?"
-assert_rc "detects 'who is' search question" 0 $?
+# Search fallback: ? with 4+ words
+assert_eq "classifies long question with ? as search" "search" "$(classify_input "can you explain recursion to me?")"
 
-is_search_question "how does docker work?"
-assert_rc "detects 'how does' search question" 0 $?
+# Local-answerable → empty (model fallback)
+assert_eq "local: what time → empty" "" "$(classify_input "what time is it?")"
+assert_eq "local: disk space → empty" "" "$(classify_input "how much disk space do I have?")"
+assert_eq "local: files → empty" "" "$(classify_input "what files are here?")"
 
-# Typos in question words
-is_search_question "hw to install nodejs?"
-assert_rc "detects typo: hw to" 0 $?
+# Read patterns
+assert_eq "classifies 'read config.json' as read" "read" "$(classify_input "read config.json")"
+assert_eq "classifies 'cat /etc/hosts' as read" "read" "$(classify_input "cat /etc/hosts")"
+assert_eq "classifies 'show main.py' as read" "read" "$(classify_input "show main.py")"
 
-is_search_question "waht is kubernetes?"
-assert_rc "detects typo: waht is" 0 $?
+# Write patterns
+assert_eq "classifies 'write hello.txt' as write" "write" "$(classify_input "write hello.txt")"
+assert_eq "classifies 'create test.py' as write" "write" "$(classify_input "create test.py")"
 
-is_search_question "hoe to install docker?"
-assert_rc "detects typo: hoe to" 0 $?
+# Shell patterns
+assert_eq "classifies 'run ls -la' as shell" "shell" "$(classify_input "run ls -la")"
+assert_eq "classifies bare 'ls' as shell" "shell" "$(classify_input "ls")"
+assert_eq "classifies bare 'git status' as shell" "shell" "$(classify_input "git status")"
+assert_eq "classifies bare 'docker ps' as shell" "shell" "$(classify_input "docker ps")"
 
-is_search_question "woh is linus torvalds?"
-assert_rc "detects typo: woh is" 0 $?
-
-# Trailing ? with 4+ words (fallback)
-is_search_question "can you explain recursion to me?"
-assert_rc "detects long question with ?" 0 $?
-
-# Local-answerable (rejected)
-is_search_question "what time is it?"
-assert_rc "rejects local: what time" 1 $?
-
-is_search_question "how much disk space do I have?"
-assert_rc "rejects local: disk space" 1 $?
-
-is_search_question "what files are here?"
-assert_rc "rejects local: files" 1 $?
-
-is_search_question "show me the date"
-assert_rc "rejects local: date" 1 $?
-
-# Non-questions (rejected)
-is_search_question "list files"
-assert_rc "rejects non-question: list files" 1 $?
-
-is_search_question "read config.json"
-assert_rc "rejects non-question: read config" 1 $?
+# Fallback → empty
+assert_eq "classifies ambiguous input as empty" "" "$(classify_input "do something interesting")"
 
 # ── Tests: exec_tool search no break error ────────────
 echo ""
