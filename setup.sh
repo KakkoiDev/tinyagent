@@ -32,7 +32,7 @@ PLATFORM="$(detect_platform)"
 echo "=== miniagents setup ($PLATFORM) ==="
 
 # ── Install packages ────────────────────────────────────
-echo "[1/4] Installing packages..."
+echo "[1/5] Installing packages..."
 case "$PLATFORM" in
     termux)
         pkg install -y jq cmake clang git curl
@@ -57,16 +57,44 @@ case "$PLATFORM" in
         ;;
 esac
 
+# ── Install lightpanda (optional: SKIP_LIGHTPANDA=1 to skip) ──
+if [ "${SKIP_LIGHTPANDA:-}" != "1" ]; then
+    LIGHTPANDA_BIN="$SCRIPT_DIR/lightpanda"
+    if [ -x "$LIGHTPANDA_BIN" ]; then
+        echo "[2/5] lightpanda already installed."
+    else
+        echo "[2/5] Installing lightpanda..."
+        ARCH="$(uname -m)"
+        OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+        case "$ARCH" in
+            x86_64)  LP_ARCH="x86_64" ;;
+            aarch64|arm64) LP_ARCH="aarch64" ;;
+            *) echo "Error: unsupported architecture $ARCH for lightpanda"; exit 1 ;;
+        esac
+        case "$OS" in
+            linux)  LP_OS="linux" ;;
+            darwin) LP_OS="macos" ;;
+            *) echo "Error: unsupported OS $OS for lightpanda"; exit 1 ;;
+        esac
+        LP_URL="https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-${LP_ARCH}-${LP_OS}"
+        curl -L --fail -o "$LIGHTPANDA_BIN" "$LP_URL"
+        chmod +x "$LIGHTPANDA_BIN"
+        echo "  lightpanda installed at $LIGHTPANDA_BIN"
+    fi
+else
+    echo "[2/5] Skipping lightpanda (SKIP_LIGHTPANDA=1)."
+fi
+
 # ── Clone and build llama.cpp ───────────────────────────
 if [ -d "$LLAMA_DIR" ]; then
-    echo "[2/4] llama.cpp already exists, pulling latest..."
+    echo "[3/5] llama.cpp already exists, pulling latest..."
     cd "$LLAMA_DIR" && git pull
 else
-    echo "[2/4] Cloning llama.cpp..."
+    echo "[3/5] Cloning llama.cpp..."
     git clone --depth 1 https://github.com/ggerganov/llama.cpp "$LLAMA_DIR"
 fi
 
-echo "[2/4] Building llama.cpp (cmake)..."
+echo "[3/5] Building llama.cpp (cmake)..."
 cd "$LLAMA_DIR"
 cmake -B build -DLLAMA_CURL=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF
 cmake --build build --config Release -j"$(ncpus)" --target llama-server
@@ -75,10 +103,10 @@ cmake --build build --config Release -j"$(ncpus)" --target llama-server
 mkdir -p "$MODEL_DIR"
 MIN_MODEL_SIZE=100000000  # ~100MB minimum for a valid GGUF
 if [ -f "$MODEL_DIR/$MODEL_NAME" ] && [ "$(stat -c%s "$MODEL_DIR/$MODEL_NAME" 2>/dev/null || stat -f%z "$MODEL_DIR/$MODEL_NAME" 2>/dev/null)" -gt "$MIN_MODEL_SIZE" ]; then
-    echo "[3/4] Model already downloaded."
+    echo "[4/5] Model already downloaded."
 else
     rm -f "$MODEL_DIR/$MODEL_NAME"
-    echo "[3/4] Downloading model ($MODEL_NAME)..."
+    echo "[4/5] Downloading model ($MODEL_NAME)..."
     curl -L --fail -o "$MODEL_DIR/$MODEL_NAME" "$MODEL_URL"
     # Verify download
     local_size="$(stat -c%s "$MODEL_DIR/$MODEL_NAME" 2>/dev/null || stat -f%z "$MODEL_DIR/$MODEL_NAME" 2>/dev/null)"
@@ -90,7 +118,7 @@ else
 fi
 
 # ── Platform-specific setup ─────────────────────────────
-echo "[4/4] Platform setup..."
+echo "[5/5] Platform setup..."
 case "$PLATFORM" in
     termux)
         termux-setup-storage || true
