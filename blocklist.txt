@@ -1,0 +1,9 @@
+rm\s+-rf\s+[/~.]
+rm\s+-r\s+[/~.]
+mkfs\.
+dd\s+if=
+>\s*/dev/sd
+chmod\s+-R\s+777
+curl.*\|\s*(ba)?sh
+wget.*\|\s*(ba)?sh
+:(){ :\|:& };:

@@ -1,0 +1,8 @@
+<s>Order these steps. Mark dependencies.
+R: {"plan":[{"step":1,"tool":"...","args":{...},"needs":[]}, ...]}
+
+<steps>
+$STEPS
+</steps>
+
+<next>

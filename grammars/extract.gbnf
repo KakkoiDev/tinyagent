@@ -1,0 +1,17 @@
+root ::= "{\"steps\":[" step ("," step)* "]}"
+
+step ::= "{\"tool\":" tool ",\"args\":{" args "}}"
+
+tool ::= "\"read\"" | "\"write\"" | "\"shell\""
+
+args ::= pair ("," pair)*
+
+pair ::= string ":" string
+
+string ::= "\"" chars "\""
+
+chars ::= char*
+
+char ::= [^"\\] | "\\" escape
+
+escape ::= ["\\nrt/]

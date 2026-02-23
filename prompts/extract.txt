@@ -1,0 +1,9 @@
+<s>Extract tool calls needed for the request.
+T: read(path) write(path,content) shell(cmd)
+Search: shell(curl -s "SEARXNG_URL/search?q=QUERY&format=json")
+R: {"steps":[{"tool":"...","args":{...}}, ...]}
+
+<req>$REQUEST</req>
+<last>$LAST</last>
+
+<next>

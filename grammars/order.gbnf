@@ -1,0 +1,21 @@
+root ::= "{\"plan\":[" planstep ("," planstep)* "]}"
+
+planstep ::= "{\"step\":" integer ",\"tool\":" tool ",\"args\":{" args "},\"needs\":[" needs "]}"
+
+tool ::= "\"read\"" | "\"write\"" | "\"shell\""
+
+args ::= pair ("," pair)*
+
+pair ::= string ":" string
+
+string ::= "\"" chars "\""
+
+chars ::= char*
+
+char ::= [^"\\] | "\\" escape
+
+escape ::= ["\\nrt/]
+
+integer ::= [1-9] [0-9]*
+
+needs ::= (integer ("," integer)*)?
