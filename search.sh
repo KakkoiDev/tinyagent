@@ -4,7 +4,7 @@
 set -uo pipefail
 
 QUERY="${1:?Usage: search.sh QUERY [max_results]}"
-MAX="${2:-1}"
+MAX="${2:-3}"
 DDG_URL="https://lite.duckduckgo.com/lite/"
 UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
 

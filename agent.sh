@@ -218,15 +218,18 @@ summarize_result() {
             echo "ok ${line_count}ln"
             ;;
         search)
-            # Extract title and snippet for LLM context
-            local title snippet
-            title="$(printf '%s' "$raw" | jq -r '.[0].title // empty' 2>/dev/null)"
-            snippet="$(printf '%s' "$raw" | jq -r '.[0].snippet // empty' 2>/dev/null)"
-            if [ -n "$title" ]; then
-                echo "$title: $snippet"
-            else
-                echo "$raw" | head -3
-            fi
+            # Combine top snippets into concise LAST for LLM context
+            local combined=""
+            local count
+            count="$(printf '%s' "$raw" | jq 'length' 2>/dev/null)" || count=0
+            local i=0
+            while [ $i -lt "$count" ] && [ $i -lt 3 ]; do
+                local s
+                s="$(printf '%s' "$raw" | jq -r ".[$i].snippet // empty" 2>/dev/null)"
+                [ -n "$s" ] && combined="$combined $s"
+                i=$((i + 1))
+            done
+            echo "$combined"
             ;;
         *)
             echo "$raw" | head -5
@@ -239,21 +242,29 @@ format_output() {
     local raw="$1"
     # Detect search results JSON (array with title/url/snippet)
     if printf '%s' "$raw" | jq -e '.[0].title' > /dev/null 2>&1; then
+        # Pick best snippet: longest non-empty one from top 3
+        local best_snippet="" best_url="" best_len=0
         local count
         count="$(printf '%s' "$raw" | jq 'length')"
         local i=0
         while [ $i -lt "$count" ]; do
-            local title url snippet
-            title="$(printf '%s' "$raw" | jq -r ".[$i].title")"
-            url="$(printf '%s' "$raw" | jq -r ".[$i].url")"
+            local snippet url slen
             snippet="$(printf '%s' "$raw" | jq -r ".[$i].snippet")"
-            echo ""
-            echo -e "  ${BOLD}$title${RESET}"
-            echo -e "  ${DIM}$snippet${RESET}"
-            # OSC 8 clickable link
-            printf "  \e]8;;%s\e\\%s\e]8;;\e\\\\\n" "$url" "$url"
+            url="$(printf '%s' "$raw" | jq -r ".[$i].url")"
+            slen="${#snippet}"
+            if [ "$slen" -gt "$best_len" ]; then
+                best_snippet="$snippet"
+                best_url="$url"
+                best_len="$slen"
+            fi
             i=$((i + 1))
         done
+        # Trim to first sentence
+        local answer
+        answer="$(echo "$best_snippet" | sed 's/\. .*/\./')"
+        echo ""
+        echo -e "  ${BOLD}$answer${RESET}"
+        printf "  \e]8;;%s\e\\%s\e]8;;\e\\\\\n" "$best_url" "$best_url"
         echo ""
         return
     fi
