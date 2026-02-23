@@ -11,6 +11,31 @@ LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/logs}"
 GRAMMAR_DIR="${GRAMMAR_DIR:-$SCRIPT_DIR/grammars}"
 PROMPT_DIR="${PROMPT_DIR:-$SCRIPT_DIR/prompts}"
 BLOCKLIST="${BLOCKLIST:-$SCRIPT_DIR/blocklist.txt}"
+CACHE_DIR="${CACHE_DIR:-$SCRIPT_DIR/.cache}"
+CACHE_TTL="${CACHE_TTL:-600}"  # 10 minutes
+
+# ── Cache helpers ──────────────────────────────────────
+_cache_key() {
+    echo "$1" | tr '[:upper:]' '[:lower:]' | md5sum | cut -d' ' -f1
+}
+
+cache_get() {
+    local key
+    key="$(_cache_key "$1")"
+    local file="$CACHE_DIR/$key"
+    [ -f "$file" ] || return 1
+    local age
+    age=$(( $(date +%s) - $(stat -c%Y "$file" 2>/dev/null || stat -f%m "$file" 2>/dev/null) ))
+    [ "$age" -gt "$CACHE_TTL" ] && { rm -f "$file"; return 1; }
+    cat "$file"
+}
+
+cache_set() {
+    local key
+    key="$(_cache_key "$1")"
+    mkdir -p "$CACHE_DIR"
+    printf '%s' "$2" > "$CACHE_DIR/$key"
+}
 
 # ── Platform helpers ────────────────────────────────────
 _ncpus() {
@@ -318,6 +343,12 @@ exec_tool() {
                 echo "err: no query specified"
                 return 1
             fi
+            # Check cache first
+            local cached
+            if cached="$(cache_get "$query")"; then
+                echo "$cached"
+                return $exit_code
+            fi
             # DDG search → keyword-score snippets → return best snippet + URL
             local results
             results="$(bash "$SCRIPT_DIR/search.sh" "$query" 3)" || true
@@ -352,6 +383,7 @@ exec_tool() {
             snippet="$(printf '%s' "$results" | jq -r ".[$best_idx].snippet // empty")"
             url="$(printf '%s' "$results" | jq -r ".[$best_idx].url // empty")"
             output="$(jq -n --arg s "$snippet" --arg u "$url" '{answer:$s,url:$u}')"
+            cache_set "$query" "$output"
             ;;
         *)
             echo "err: unknown tool: $tool"
