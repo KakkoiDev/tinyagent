@@ -227,15 +227,15 @@ summarize_result() {
 format_output() {
     local raw="$1"
     # Detect search results JSON (array with title/url/snippet)
-    if echo "$raw" | jq -e '.[0].title' > /dev/null 2>&1; then
+    if printf '%s' "$raw" | jq -e '.[0].title' > /dev/null 2>&1; then
         local count
-        count="$(echo "$raw" | jq 'length')"
+        count="$(printf '%s' "$raw" | jq 'length')"
         local i=0
         while [ $i -lt "$count" ]; do
             local title url snippet
-            title="$(echo "$raw" | jq -r ".[$i].title" | sed 's/&#x27;/'"'"'/g; s/&amp;/\&/g; s/&lt;/</g; s/&gt;/>/g')"
-            url="$(echo "$raw" | jq -r ".[$i].url")"
-            snippet="$(echo "$raw" | jq -r ".[$i].snippet" | sed 's/&#x27;/'"'"'/g; s/&amp;/\&/g; s/&lt;/</g; s/&gt;/>/g')"
+            title="$(printf '%s' "$raw" | jq -r ".[$i].title")"
+            url="$(printf '%s' "$raw" | jq -r ".[$i].url")"
+            snippet="$(printf '%s' "$raw" | jq -r ".[$i].snippet")"
             echo ""
             echo -e "  ${BOLD}$title${RESET}"
             echo -e "  ${DIM}$snippet${RESET}"
