@@ -420,7 +420,7 @@ confirm_and_exec_step() {
         '{step: $step, action: $action}')"
 
     case "$action" in
-        r|R)
+        r|R|a|A)
             log_event "exec_start" "$(jq -n --arg tool "$tool" --arg args "$args_json" \
                 '{tool: $tool, args: $args}')"
             local result
