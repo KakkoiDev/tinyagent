@@ -6,16 +6,6 @@ SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 MODEL="${MODEL:-$SCRIPT_DIR/models/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf}"
 LLAMA_SERVER="${LLAMA_SERVER:-$SCRIPT_DIR/llama.cpp/build/bin/llama-server}"
 PORT="${PORT:-8085}"
-SEARXNG_URL="${SEARXNG_URL:-}"
-SEARXNG_INSTANCES=(
-    "https://search.sapti.me"
-    "https://searx.tiekoetter.com"
-    "https://priv.au"
-    "https://paulgo.io"
-    "https://etsi.me"
-    "https://search.ononoki.org"
-    "https://searx.be"
-)
 MAX_PREDICT="${MAX_PREDICT:-256}"
 LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/logs}"
 GRAMMAR_DIR="${GRAMMAR_DIR:-$SCRIPT_DIR/grammars}"
@@ -36,25 +26,6 @@ _ncpus() {
 _ms_timestamp() {
     # macOS date lacks %N; fall back to seconds
     date +%s%3N 2>/dev/null || echo "$(date +%s)000"
-}
-
-_pick_searxng() {
-    # Use configured URL if set
-    if [ -n "$SEARXNG_URL" ]; then
-        echo "$SEARXNG_URL"
-        return
-    fi
-    # Probe instances until one responds with JSON
-    for url in "${SEARXNG_INSTANCES[@]}"; do
-        local resp
-        resp="$(curl -sf --max-time 5 -A 'miniagents/0.1' "$url/search?q=ping&format=json" 2>/dev/null | head -c 20)"
-        if echo "$resp" | grep -q '{'; then
-            echo "$url"
-            return
-        fi
-    done
-    # Fallback to first in list
-    echo "${SEARXNG_INSTANCES[0]}"
 }
 
 # ── Session state ───────────────────────────────────────
@@ -188,7 +159,6 @@ build_extract_prompt() {
     template="$(cat "$PROMPT_DIR/extract.txt")"
     template="${template//\$REQUEST/$request}"
     template="${template//\$LAST/$last}"
-    template="${template//SEARXNG_URL/$SEARXNG_URL}"
     echo "$template"
 }
 
@@ -655,9 +625,6 @@ main() {
 
     start_server
 
-    echo -e "${DIM}Probing search instances...${RESET}"
-    SEARXNG_URL="$(_pick_searxng)"
-    echo -e "${DIM}Search: $SEARXNG_URL${RESET}"
     echo ""
     while true; do
         printf "${GREEN}> ${RESET}"

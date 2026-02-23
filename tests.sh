@@ -52,7 +52,6 @@ source "$SCRIPT_DIR/agent.sh"
 # Override config for test context
 BLOCKLIST="$SCRIPT_DIR/blocklist.txt"
 PROMPT_DIR="$SCRIPT_DIR/prompts"
-SEARXNG_URL="https://searx.be"
 
 # ── Tests: validate_command ─────────────────────────────
 echo "validate_command"
@@ -160,7 +159,7 @@ echo "build_extract_prompt"
 out="$(build_extract_prompt "list files" "prev result")"
 assert_contains "extract prompt includes request" "list files" "$out"
 assert_contains "extract prompt includes last result" "prev result" "$out"
-assert_contains "extract prompt includes searxng url" "searx.be" "$out"
+assert_contains "extract prompt includes search tool" "search.sh" "$out"
 
 # ── Tests: build_order_prompt ───────────────────────────
 echo ""

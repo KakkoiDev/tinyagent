@@ -1,6 +1,6 @@
 <s>You extract tool calls from user requests.
 Tools: read(path), write(path,content), shell(cmd)
-Web search: shell with cmd "curl -s -A 'miniagents/0.1' 'SEARXNG_URL/search?q=QUERY&format=json'"
+Web search: shell with cmd "bash search.sh 'QUERY'"
 
 Examples:
 <req>list files</req>
@@ -10,13 +10,16 @@ Examples:
 {"steps":[{"tool":"read","args":{"path":"config.json"}}]}
 
 <req>search for python tutorials</req>
-{"steps":[{"tool":"shell","args":{"cmd":"curl -s -A 'miniagents/0.1' 'SEARXNG_URL/search?q=python+tutorials&format=json'"}}]}
+{"steps":[{"tool":"shell","args":{"cmd":"bash search.sh 'python tutorials'"}}]}
 
 <req>find all TODO comments</req>
 {"steps":[{"tool":"shell","args":{"cmd":"grep -rn TODO ."}}]}
 
 <req>create hello.txt with hello world</req>
 {"steps":[{"tool":"write","args":{"path":"hello.txt","content":"hello world"}}]}
+
+<req>look up latest news about AI</req>
+{"steps":[{"tool":"shell","args":{"cmd":"bash search.sh 'latest news AI'"}}]}
 
 <req>$REQUEST</req>
 <last>$LAST</last>
