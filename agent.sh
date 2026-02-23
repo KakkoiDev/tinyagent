@@ -170,6 +170,16 @@ build_order_prompt() {
     echo "$template"
 }
 
+build_plan_prompt() {
+    local request="$1"
+    local last="$2"
+    local template
+    template="$(cat "$PROMPT_DIR/plan.txt")"
+    template="${template//\$REQUEST/$request}"
+    template="${template//\$LAST/$last}"
+    echo "$template"
+}
+
 
 # ── Validation ──────────────────────────────────────────
 validate_command() {
@@ -648,80 +658,48 @@ process_input() {
         fi
     fi
 
-    # Build and run extract
+    # Single model call: extract + order in one pass
     echo -e "${DIM}Thinking...${RESET}"
     local prompt
-    prompt="$(build_extract_prompt "$request" "$LAST_RESULT")"
+    prompt="$(build_plan_prompt "$request" "$LAST_RESULT")"
 
     log_event "context_built" "$(jq -n --arg prompt "$prompt" '{prompt: $prompt}')"
 
-    local raw_output
-    raw_output="$(call_model "$prompt" "$GRAMMAR_DIR/extract.gbnf")"
+    local plan_output
+    plan_output="$(call_model "$prompt" "$GRAMMAR_DIR/plan.gbnf")"
 
-    if [ -z "$raw_output" ]; then
+    if [ -z "$plan_output" ]; then
         echo -e "${RED}Model returned empty response.${RESET}"
         return
     fi
 
-    # Parse steps
-    local steps
-    steps="$(echo "$raw_output" | jq -r '.steps // empty' 2>/dev/null)"
-    if [ -z "$steps" ]; then
+    local step_count
+    step_count="$(echo "$plan_output" | jq '.plan | length' 2>/dev/null)" || step_count=0
+    if [ "$step_count" -eq 0 ]; then
         echo -e "${RED}Failed to parse model output.${RESET}"
         log_event "parse_result" '{"success":false}'
         return
     fi
 
-    local step_count
-    step_count="$(echo "$raw_output" | jq '.steps | length')"
-
-    log_event "parse_result" "$(jq -n --argjson count "$step_count" --arg raw "$raw_output" \
+    log_event "parse_result" "$(jq -n --argjson count "$step_count" --arg raw "$plan_output" \
         '{success: true, step_count: $count, raw: $raw}')"
 
     if [ "$step_count" -eq 1 ]; then
-        # Single step — go straight to confirmation
         local tool args
-        tool="$(echo "$raw_output" | jq -r '.steps[0].tool')"
-        args="$(echo "$raw_output" | jq -c '.steps[0].args')"
+        tool="$(echo "$plan_output" | jq -r '.plan[0].tool')"
+        args="$(echo "$plan_output" | jq -c '.plan[0].args')"
         confirm_and_exec_step 1 1 "$tool" "$args"
         return
     fi
 
-    # Multi-step — run ordering
-    echo -e "${DIM}Planning $step_count steps...${RESET}"
-    local order_prompt
-    order_prompt="$(build_order_prompt "$raw_output")"
-    local plan_output
-    plan_output="$(call_model "$order_prompt" "$GRAMMAR_DIR/order.gbnf")"
-
-    if [ -z "$plan_output" ]; then
-        echo -e "${YELLOW}Ordering failed, using original order.${RESET}"
-        plan_output="$raw_output"
-    fi
-
-    # Show plan
-    local plan_steps
-    plan_steps="$(echo "$plan_output" | jq -c '.plan // empty' 2>/dev/null)"
-    if [ -z "$plan_steps" ]; then
-        # Fallback to unordered steps
-        plan_steps="$steps"
-        step_count="$(echo "$raw_output" | jq '.steps | length')"
-    else
-        step_count="$(echo "$plan_output" | jq '.plan | length')"
-    fi
-
+    # Multi-step — show plan and confirm
     echo ""
     echo -e "${BOLD}Plan ($step_count steps):${RESET}"
     local i=0
     while [ $i -lt "$step_count" ]; do
         local tool display args_json
-        if echo "$plan_output" | jq -e '.plan' > /dev/null 2>&1; then
-            tool="$(echo "$plan_output" | jq -r ".plan[$i].tool")"
-            args_json="$(echo "$plan_output" | jq -c ".plan[$i].args")"
-        else
-            tool="$(echo "$raw_output" | jq -r ".steps[$i].tool")"
-            args_json="$(echo "$raw_output" | jq -c ".steps[$i].args")"
-        fi
+        tool="$(echo "$plan_output" | jq -r ".plan[$i].tool")"
+        args_json="$(echo "$plan_output" | jq -c ".plan[$i].args")"
         display="$(get_display_text "$tool" "$args_json")"
         echo -e "  ${CYAN}$((i+1)).${RESET} ${tool}: $display"
         i=$((i + 1))
@@ -739,23 +717,16 @@ process_input() {
 
     case "$plan_action" in
         a|A)
-            # Execute all steps without individual confirmation
             local i=0
             while [ $i -lt "$step_count" ]; do
                 local tool args_json
-                if echo "$plan_output" | jq -e '.plan' > /dev/null 2>&1; then
-                    tool="$(echo "$plan_output" | jq -r ".plan[$i].tool")"
-                    args_json="$(echo "$plan_output" | jq -c ".plan[$i].args")"
-                else
-                    tool="$(echo "$raw_output" | jq -r ".steps[$i].tool")"
-                    args_json="$(echo "$raw_output" | jq -c ".steps[$i].args")"
-                fi
+                tool="$(echo "$plan_output" | jq -r ".plan[$i].tool")"
+                args_json="$(echo "$plan_output" | jq -c ".plan[$i].args")"
 
                 local display
                 display="$(get_display_text "$tool" "$args_json")"
                 echo -e "${CYAN}[$((i+1))/$step_count]${RESET} $tool: $display"
 
-                # Still validate shell commands
                 if [ "$tool" = "shell" ]; then
                     local cmd
                     cmd="$(echo "$args_json" | jq -r '.cmd // empty')"
@@ -782,17 +753,11 @@ process_input() {
             done
             ;;
         s|S)
-            # Step-by-step confirmation
             local i=0
             while [ $i -lt "$step_count" ]; do
                 local tool args_json
-                if echo "$plan_output" | jq -e '.plan' > /dev/null 2>&1; then
-                    tool="$(echo "$plan_output" | jq -r ".plan[$i].tool")"
-                    args_json="$(echo "$plan_output" | jq -c ".plan[$i].args")"
-                else
-                    tool="$(echo "$raw_output" | jq -r ".steps[$i].tool")"
-                    args_json="$(echo "$raw_output" | jq -c ".steps[$i].args")"
-                fi
+                tool="$(echo "$plan_output" | jq -r ".plan[$i].tool")"
+                args_json="$(echo "$plan_output" | jq -c ".plan[$i].args")"
                 confirm_and_exec_step "$((i+1))" "$step_count" "$tool" "$args_json"
                 local rc=$?
                 if [ $rc -eq 2 ]; then
@@ -859,16 +824,16 @@ run_query() {
 
     # Model fallback
     local prompt
-    prompt="$(build_extract_prompt "$input" "$LAST_RESULT")"
-    local raw_output
-    raw_output="$(call_model "$prompt" "$GRAMMAR_DIR/extract.gbnf")"
-    if [ -z "$raw_output" ]; then
+    prompt="$(build_plan_prompt "$input" "$LAST_RESULT")"
+    local plan_output
+    plan_output="$(call_model "$prompt" "$GRAMMAR_DIR/plan.gbnf")"
+    if [ -z "$plan_output" ]; then
         echo "Model returned empty response." >&2
         return 1
     fi
 
     local step_count
-    step_count="$(echo "$raw_output" | jq '.steps | length' 2>/dev/null)" || step_count=0
+    step_count="$(echo "$plan_output" | jq '.plan | length' 2>/dev/null)" || step_count=0
     if [ "$step_count" -eq 0 ]; then
         echo "Failed to parse model output." >&2
         return 1
@@ -878,8 +843,8 @@ run_query() {
     local i=0
     while [ $i -lt "$step_count" ]; do
         local tool args_json
-        tool="$(echo "$raw_output" | jq -r ".steps[$i].tool")"
-        args_json="$(echo "$raw_output" | jq -c ".steps[$i].args")"
+        tool="$(echo "$plan_output" | jq -r ".plan[$i].tool")"
+        args_json="$(echo "$plan_output" | jq -c ".plan[$i].args")"
         if [ "$tool" = "search" ]; then
             local result
             result="$(exec_tool "$tool" "$args_json")"

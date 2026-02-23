@@ -1,0 +1,19 @@
+root ::= "{\"plan\":[" step ("," step)* "]}"
+
+step ::= read-step | write-step | shell-step | search-step
+
+read-step ::= "{\"tool\":\"read\",\"args\":{\"path\":" string "}}"
+
+write-step ::= "{\"tool\":\"write\",\"args\":{\"path\":" string ",\"content\":" string "}}"
+
+shell-step ::= "{\"tool\":\"shell\",\"args\":{\"cmd\":" string "}}"
+
+search-step ::= "{\"tool\":\"search\",\"args\":{\"query\":" string "}}"
+
+string ::= "\"" chars "\""
+
+chars ::= char*
+
+char ::= [^"\\] | "\\" escape
+
+escape ::= ["\\nrt/]
