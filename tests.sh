@@ -233,6 +233,136 @@ assert_rc "extract.gbnf exists and non-empty" 0 $?
 [ -s "$SCRIPT_DIR/grammars/order.gbnf" ]
 assert_rc "order.gbnf exists and non-empty" 0 $?
 
+# ── Tests: fetch.sh ────────────────────────────────────
+echo ""
+echo "fetch.sh"
+
+out="$(bash "$SCRIPT_DIR/fetch.sh" "https://example.com" 10 2>/dev/null)"
+rc=$?
+assert_rc "fetch.sh returns success for example.com" 0 $rc
+assert_contains "fetch.sh output has numbered lines" "1" "$out"
+
+out="$(bash "$SCRIPT_DIR/fetch.sh" "https://example.com" 5 2>/dev/null)"
+line_count="$(echo "$out" | wc -l | tr -d ' ')"
+[ "$line_count" -le 6 ]
+assert_rc "fetch.sh respects max_lines" 0 $?
+
+
+# ── Tests: format_output with answer JSON ─────────────
+echo ""
+echo "format_output (answer JSON)"
+
+out="$(format_output '{"answer":"Rust is a systems language.","url":"https://rust-lang.org"}')"
+assert_contains "format_output shows answer" "Rust is a systems language." "$out"
+assert_contains "format_output shows url" "rust-lang.org" "$out"
+
+out="$(format_output '{"answer":"No results found.","url":""}')"
+assert_contains "format_output handles empty url" "No results found." "$out"
+
+# ── Tests: summarize_result for search ────────────────
+echo ""
+echo "summarize_result (search)"
+
+out="$(summarize_result "search" '{"answer":"Rust is fast.","url":"https://rust-lang.org"}')"
+assert_eq "summarize_result extracts answer" "Rust is fast." "$out"
+
+
+# ── Tests: spellcheck ──────────────────────────────────
+echo ""
+echo "spellcheck"
+
+if command -v aspell > /dev/null 2>&1; then
+    out="$(spellcheck "waht is rust")"
+    assert_eq "corrects 'waht' to 'what'" "what is rust" "$out"
+
+    out="$(spellcheck "how to instal nodejs")"
+    assert_contains "corrects 'instal'" "install" "$out"
+
+    out="$(spellcheck "what is kubernetes")"
+    assert_eq "leaves correct text unchanged" "what is kubernetes" "$out"
+
+    out="$(spellcheck "programing langauge")"
+    assert_contains "corrects 'programing'" "programming" "$out"
+    assert_contains "corrects 'langauge'" "language" "$out"
+else
+    echo "  SKIP: aspell not installed"
+fi
+
+# ── Tests: is_search_question ──────────────────────────
+echo ""
+echo "is_search_question"
+
+# Correct spelling
+is_search_question "how to install nodejs?"
+assert_rc "detects 'how to' search question" 0 $?
+
+is_search_question "what is rust?"
+assert_rc "detects 'what is' search question" 0 $?
+
+is_search_question "who is linus torvalds?"
+assert_rc "detects 'who is' search question" 0 $?
+
+is_search_question "how does docker work?"
+assert_rc "detects 'how does' search question" 0 $?
+
+# Typos in question words
+is_search_question "hw to install nodejs?"
+assert_rc "detects typo: hw to" 0 $?
+
+is_search_question "waht is kubernetes?"
+assert_rc "detects typo: waht is" 0 $?
+
+is_search_question "hoe to install docker?"
+assert_rc "detects typo: hoe to" 0 $?
+
+is_search_question "woh is linus torvalds?"
+assert_rc "detects typo: woh is" 0 $?
+
+# Trailing ? with 4+ words (fallback)
+is_search_question "can you explain recursion to me?"
+assert_rc "detects long question with ?" 0 $?
+
+# Local-answerable (rejected)
+is_search_question "what time is it?"
+assert_rc "rejects local: what time" 1 $?
+
+is_search_question "how much disk space do I have?"
+assert_rc "rejects local: disk space" 1 $?
+
+is_search_question "what files are here?"
+assert_rc "rejects local: files" 1 $?
+
+is_search_question "show me the date"
+assert_rc "rejects local: date" 1 $?
+
+# Non-questions (rejected)
+is_search_question "list files"
+assert_rc "rejects non-question: list files" 1 $?
+
+is_search_question "read config.json"
+assert_rc "rejects non-question: read config" 1 $?
+
+# ── Tests: exec_tool search no break error ────────────
+echo ""
+echo "exec_tool search (no break error)"
+
+# This should not produce 'break: only meaningful in a for/while/until loop'
+out="$(exec_tool "search" '{"query":"test query 12345"}' 2>&1)"
+rc=$?
+assert_rc "exec_tool search exits cleanly" 0 $rc
+# Output should be valid JSON with answer key, not contain 'break'
+if echo "$out" | grep -q "break:"; then
+    fail "exec_tool search has no break error" "found 'break:' in output"
+else
+    pass "exec_tool search has no break error"
+fi
+# Should produce {answer, url} JSON
+if printf '%s' "$out" | jq -e '.answer' > /dev/null 2>&1; then
+    pass "exec_tool search returns answer JSON"
+else
+    fail "exec_tool search returns answer JSON" "output: $out"
+fi
+
 # ── Tests: blocklist patterns ───────────────────────────
 echo ""
 echo "blocklist patterns"

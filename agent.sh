@@ -170,6 +170,7 @@ build_order_prompt() {
     echo "$template"
 }
 
+
 # ── Validation ──────────────────────────────────────────
 validate_command() {
     local cmd="$1"
@@ -218,18 +219,14 @@ summarize_result() {
             echo "ok ${line_count}ln"
             ;;
         search)
-            # Combine top snippets into concise LAST for LLM context
-            local combined=""
-            local count
-            count="$(printf '%s' "$raw" | jq 'length' 2>/dev/null)" || count=0
-            local i=0
-            while [ $i -lt "$count" ] && [ $i -lt 3 ]; do
-                local s
-                s="$(printf '%s' "$raw" | jq -r ".[$i].snippet // empty" 2>/dev/null)"
-                [ -n "$s" ] && combined="$combined $s"
-                i=$((i + 1))
-            done
-            echo "$combined"
+            # Extract the answer sentence from {answer, url} JSON
+            local answer
+            answer="$(printf '%s' "$raw" | jq -r '.answer // empty' 2>/dev/null)" || answer=""
+            if [ -n "$answer" ]; then
+                echo "$answer"
+            else
+                echo "$raw" | head -5
+            fi
             ;;
         *)
             echo "$raw" | head -5
@@ -240,31 +237,16 @@ summarize_result() {
 # ── Output formatter ────────────────────────────────────
 format_output() {
     local raw="$1"
-    # Detect search results JSON (array with title/url/snippet)
-    if printf '%s' "$raw" | jq -e '.[0].title' > /dev/null 2>&1; then
-        # Pick best snippet: longest non-empty one from top 3
-        local best_snippet="" best_url="" best_len=0
-        local count
-        count="$(printf '%s' "$raw" | jq 'length')"
-        local i=0
-        while [ $i -lt "$count" ]; do
-            local snippet url slen
-            snippet="$(printf '%s' "$raw" | jq -r ".[$i].snippet")"
-            url="$(printf '%s' "$raw" | jq -r ".[$i].url")"
-            slen="${#snippet}"
-            if [ "$slen" -gt "$best_len" ]; then
-                best_snippet="$snippet"
-                best_url="$url"
-                best_len="$slen"
-            fi
-            i=$((i + 1))
-        done
-        # Trim to first sentence
-        local answer
-        answer="$(echo "$best_snippet" | sed 's/\. .*/\./')"
+    # Detect search answer JSON {answer, url}
+    if printf '%s' "$raw" | jq -e '.answer' > /dev/null 2>&1; then
+        local answer url
+        answer="$(printf '%s' "$raw" | jq -r '.answer')"
+        url="$(printf '%s' "$raw" | jq -r '.url')"
         echo ""
         echo -e "  ${BOLD}$answer${RESET}"
-        printf "  \e]8;;%s\e\\%s\e]8;;\e\\\\\n" "$best_url" "$best_url"
+        if [ -n "$url" ]; then
+            printf "  \e]8;;%s\e\\%s\e]8;;\e\\\\\n" "$url" "$url"
+        fi
         echo ""
         return
     fi
@@ -326,7 +308,89 @@ exec_tool() {
                 echo "err: no query specified"
                 return 1
             fi
-            output="$(bash "$SCRIPT_DIR/search.sh" "$query")" || exit_code=$?
+            # Step 1: DDG search (deterministic)
+            local results
+            results="$(bash "$SCRIPT_DIR/search.sh" "$query" 3)" || true
+            local result_count
+            result_count="$(printf '%s' "$results" | jq 'length' 2>/dev/null)" || result_count=0
+            if [ "$result_count" -eq 0 ]; then
+                output='{"answer":"No results found.","url":""}'
+                echo "$output"
+                return $exit_code
+            fi
+            # Step 2: Pick best result by query-word overlap in snippets (deterministic)
+            local idx=1 best_score=0
+            local i=0
+            while [ $i -lt "$result_count" ]; do
+                local snippet score=0
+                snippet="$(printf '%s' "$results" | jq -r ".[$i].snippet // empty" | tr '[:upper:]' '[:lower:]')"
+                local qw
+                for qw in $query; do
+                    qw="$(echo "$qw" | tr '[:upper:]' '[:lower:]')"
+                    [ "${#qw}" -lt 3 ] && continue
+                    if echo "$snippet" | grep -qiF "$qw"; then
+                        score=$((score + 1))
+                    fi
+                done
+                if [ "$score" -gt "$best_score" ]; then
+                    best_score="$score"
+                    idx=$((i + 1))
+                fi
+                i=$((i + 1))
+            done
+            local url
+            url="$(printf '%s' "$results" | jq -r ".[$((idx-1))].url")"
+            # Step 3: Fetch page (deterministic)
+            local page_text
+            page_text="$(bash "$SCRIPT_DIR/fetch.sh" "$url" 80 2>/dev/null)" || true
+            local fetch_lines
+            fetch_lines="$(echo "$page_text" | wc -l | tr -d ' ')"
+            if [ -z "$page_text" ] || [ "$page_text" = "1	(fetch failed)" ] || [ "$fetch_lines" -lt 5 ]; then
+                # Fallback to DDG snippet (fetch produced too little usable content)
+                local snippet
+                snippet="$(printf '%s' "$results" | jq -r ".[$((idx-1))].snippet // empty")"
+                output="$(jq -n --arg s "$snippet" --arg u "$url" '{answer:$s,url:$u}')"
+                echo "$output"
+                return $exit_code
+            fi
+            # Step 4: Pick best line by query-keyword overlap + length (deterministic)
+            local best_line="" best_score=0
+            while IFS= read -r raw_line; do
+                # Strip line number prefix
+                local line_text
+                line_text="$(echo "$raw_line" | sed 's/^[[:space:]]*[0-9]*[[:space:]]*//')"
+                # Strip markdown links/images for cleaner matching and length check
+                local clean
+                clean="$(echo "$line_text" | sed 's/\[!\[[^]]*\]([^)]*)//g; s/\[[^]]*\]([^)]*)//g; s/[*#\[\]()]//g' | sed 's/^ *//')"
+                # Skip short lines after cleaning (nav items, link-only lines)
+                [ "${#clean}" -lt 30 ] && continue
+                local clean_lower
+                clean_lower="$(echo "$clean" | tr '[:upper:]' '[:lower:]')"
+                local score=0 qw
+                for qw in $query; do
+                    qw="$(echo "$qw" | tr '[:upper:]' '[:lower:]')"
+                    [ "${#qw}" -lt 3 ] && continue
+                    if echo "$clean_lower" | grep -qiF "$qw"; then
+                        score=$((score + 1))
+                    fi
+                done
+                # Bonus for longer content lines (real paragraphs)
+                [ "${#clean}" -gt 80 ] && score=$((score + 1))
+                if [ "$score" -gt "$best_score" ]; then
+                    best_score="$score"
+                    best_line="$clean"
+                fi
+            done <<< "$page_text"
+            local sentence="$best_line"
+            # Fallback to DDG snippet if no good line found
+            if [ -z "$sentence" ] || [ "$best_score" -eq 0 ]; then
+                local snippet
+                snippet="$(printf '%s' "$results" | jq -r ".[$((idx-1))].snippet // empty")"
+                if [ -n "$snippet" ]; then
+                    sentence="$snippet"
+                fi
+            fi
+            output="$(jq -n --arg s "$sentence" --arg u "$url" '{answer:$s,url:$u}')"
             ;;
         *)
             echo "err: unknown tool: $tool"
@@ -481,11 +545,112 @@ confirm_and_exec_step() {
     done
 }
 
+# ── Question detection (fast-path for search) ─────────
+is_search_question() {
+    local input="$1"
+    local lower
+    lower="$(echo "$input" | tr '[:upper:]' '[:lower:]')"
+    # Skip if it looks locally answerable
+    case "$lower" in
+        *time*|*date*|*disk*|*space*|*files*|*directory*|*size*|*memory*|*cpu*|*process*|*running*|*uptime*) return 1 ;;
+    esac
+    # Match question words with typo tolerance (prefix matching)
+    # "how" → ho, "what" → wh/wha, "who" → wh, "why" → wh
+    local first rest
+    first="${lower%% *}"
+    rest="${lower#* }"
+    case "$first" in
+        ho|how|hw|hiw|hoe)
+            # "how to/do/does" patterns
+            case "$rest" in
+                to\ *|do\ *|does\ *|too\ *|2\ *) return 0 ;;
+            esac
+            ;;
+        wh|wha|what|waht|whta|wat|wht)
+            case "$rest" in
+                is\ *|are\ *|si\ *) return 0 ;;
+            esac
+            ;;
+        who|woh|hwo)
+            case "$rest" in
+                is\ *|si\ *) return 0 ;;
+            esac
+            ;;
+        why|whi|wyh)
+            case "$rest" in
+                does\ *|is\ *|do\ *) return 0 ;;
+            esac
+            ;;
+    esac
+    # Fallback: ends with ? and has 4+ words (likely a web question, not a local command)
+    local word_count
+    word_count="$(echo "$lower" | wc -w | tr -d ' ')"
+    case "$input" in
+        *\?) [ "$word_count" -ge 4 ] && return 0 ;;
+    esac
+    return 1
+}
+
+# ── Spellcheck ─────────────────────────────────────────
+spellcheck() {
+    local input="$1"
+    # Requires aspell
+    if ! command -v aspell > /dev/null 2>&1; then
+        echo "$input"
+        return
+    fi
+    local corrected="$input"
+    # Get misspelled words and their first suggestion
+    while IFS= read -r line; do
+        case "$line" in
+            \&*)
+                local misspelled suggestion
+                misspelled="$(echo "$line" | cut -d' ' -f2)"
+                suggestion="$(echo "$line" | cut -d' ' -f5 | tr -d ',')"
+                # Only accept if first letter matches (filters false positives like kubernetes→Cabernet's)
+                local orig_first sugg_first
+                orig_first="$(echo "${misspelled:0:1}" | tr '[:upper:]' '[:lower:]')"
+                sugg_first="$(echo "${suggestion:0:1}" | tr '[:upper:]' '[:lower:]')"
+                [ "$orig_first" != "$sugg_first" ] && continue
+                # Replace first occurrence (word-boundary safe via sed word match)
+                corrected="$(echo "$corrected" | sed "s/\b${misspelled}\b/${suggestion}/i")"
+                ;;
+        esac
+    done <<< "$(echo "$input" | aspell -a 2>/dev/null)"
+    echo "$corrected"
+}
+
 # ── Pipeline ────────────────────────────────────────────
 process_input() {
     local request="$1"
 
     log_event "user_input" "$(jq -n --arg req "$request" '{request: $req}')"
+
+    # Fast-path: web-lookup questions go directly to search (skip model extract + order)
+    if is_search_question "$request"; then
+        log_event "fast_path" '{"type":"search"}'
+        local args_json
+        args_json="$(jq -n --arg q "$request" '{query:$q}')"
+        confirm_and_exec_step 1 1 "search" "$args_json"
+        return
+    fi
+
+    # Spellcheck: if corrected version differs, propose it
+    local corrected
+    corrected="$(spellcheck "$request")"
+    if [ "$corrected" != "$request" ]; then
+        echo ""
+        echo -e "  ${YELLOW}Did you mean:${RESET} ${BOLD}$corrected${RESET}"
+        printf "  ${YELLOW}[y]es  [n]o${RESET} "
+        read -n 1 spell_action
+        echo ""
+        log_event "spellcheck" "$(jq -n --arg orig "$request" --arg fix "$corrected" --arg action "$spell_action" \
+            '{original: $orig, corrected: $fix, action: $action}')"
+        if [ "$spell_action" = "y" ] || [ "$spell_action" = "Y" ]; then
+            process_input "$corrected"
+            return
+        fi
+    fi
 
     # Build and run extract
     echo -e "${DIM}Thinking...${RESET}"
@@ -678,6 +843,55 @@ handle_builtin() {
     return 1
 }
 
+# ── Non-interactive query mode ─────────────────────────
+run_query() {
+    local input="$1"
+    mkdir -p "$LOG_DIR"
+    start_server
+
+    # Build extract prompt and get tool calls
+    local prompt
+    prompt="$(build_extract_prompt "$input" "$LAST_RESULT")"
+    local raw_output
+    raw_output="$(call_model "$prompt" "$GRAMMAR_DIR/extract.gbnf")"
+    if [ -z "$raw_output" ]; then
+        echo "Model returned empty response." >&2
+        return 1
+    fi
+
+    local step_count
+    step_count="$(echo "$raw_output" | jq '.steps | length' 2>/dev/null)" || step_count=0
+    if [ "$step_count" -eq 0 ]; then
+        echo "Failed to parse model output." >&2
+        return 1
+    fi
+
+    # Execute only search steps (skip write/shell for safety in non-interactive mode)
+    local i=0
+    while [ $i -lt "$step_count" ]; do
+        local tool args_json
+        tool="$(echo "$raw_output" | jq -r ".steps[$i].tool")"
+        args_json="$(echo "$raw_output" | jq -c ".steps[$i].args")"
+        if [ "$tool" = "search" ]; then
+            local result
+            result="$(exec_tool "$tool" "$args_json")"
+            format_output "$result"
+            LAST_RESULT="$(summarize_result "$tool" "$result")"
+        fi
+        i=$((i + 1))
+    done
+}
+
+# ── Direct search test mode ───────────────────────────
+run_search() {
+    local query="$1"
+    mkdir -p "$LOG_DIR"
+    start_server
+    local result
+    result="$(exec_tool "search" "$(jq -n --arg q "$query" '{query:$q}')")"
+    format_output "$result"
+}
+
 # ── Main REPL ───────────────────────────────────────────
 main() {
     mkdir -p "$LOG_DIR"
@@ -714,5 +928,17 @@ main() {
 
 # Only run main when executed directly, not when sourced
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
+    case "${1:-}" in
+        --query)
+            shift
+            run_query "$*"
+            ;;
+        --search)
+            shift
+            run_search "$*"
+            ;;
+        *)
+            main "$@"
+            ;;
+    esac
 fi
