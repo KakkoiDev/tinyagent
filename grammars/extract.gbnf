@@ -1,12 +1,12 @@
 root ::= "{\"steps\":[" step ("," step)* "]}"
 
-step ::= "{\"tool\":" tool ",\"args\":{" args "}}"
+step ::= read-step | write-step | shell-step
 
-tool ::= "\"read\"" | "\"write\"" | "\"shell\""
+read-step ::= "{\"tool\":\"read\",\"args\":{\"path\":" string "}}"
 
-args ::= pair ("," pair)*
+write-step ::= "{\"tool\":\"write\",\"args\":{\"path\":" string ",\"content\":" string "}}"
 
-pair ::= string ":" string
+shell-step ::= "{\"tool\":\"shell\",\"args\":{\"cmd\":" string "}}"
 
 string ::= "\"" chars "\""
 

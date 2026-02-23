@@ -1,12 +1,12 @@
 root ::= "{\"plan\":[" planstep ("," planstep)* "]}"
 
-planstep ::= "{\"step\":" integer ",\"tool\":" tool ",\"args\":{" args "},\"needs\":[" needs "]}"
+planstep ::= read-planstep | write-planstep | shell-planstep
 
-tool ::= "\"read\"" | "\"write\"" | "\"shell\""
+read-planstep ::= "{\"step\":" integer ",\"tool\":\"read\",\"args\":{\"path\":" string "},\"needs\":[" needs "]}"
 
-args ::= pair ("," pair)*
+write-planstep ::= "{\"step\":" integer ",\"tool\":\"write\",\"args\":{\"path\":" string ",\"content\":" string "},\"needs\":[" needs "]}"
 
-pair ::= string ":" string
+shell-planstep ::= "{\"step\":" integer ",\"tool\":\"shell\",\"args\":{\"cmd\":" string "},\"needs\":[" needs "]}"
 
 string ::= "\"" chars "\""
 

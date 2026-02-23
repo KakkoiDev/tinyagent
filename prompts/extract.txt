@@ -1,9 +1,22 @@
-<s>Extract tool calls needed for the request.
-T: read(path) write(path,content) shell(cmd)
-Search: shell(curl -s "SEARXNG_URL/search?q=QUERY&format=json")
-R: {"steps":[{"tool":"...","args":{...}}, ...]}
+<s>You extract tool calls from user requests.
+Tools: read(path), write(path,content), shell(cmd)
+Web search: shell with cmd "curl -s 'SEARXNG_URL/search?q=QUERY&format=json'"
+
+Examples:
+<req>list files</req>
+{"steps":[{"tool":"shell","args":{"cmd":"ls -la"}}]}
+
+<req>read config.json</req>
+{"steps":[{"tool":"read","args":{"path":"config.json"}}]}
+
+<req>search for python tutorials</req>
+{"steps":[{"tool":"shell","args":{"cmd":"curl -s 'SEARXNG_URL/search?q=python+tutorials&format=json'"}}]}
+
+<req>find all TODO comments</req>
+{"steps":[{"tool":"shell","args":{"cmd":"grep -rn TODO ."}}]}
+
+<req>create hello.txt with hello world</req>
+{"steps":[{"tool":"write","args":{"path":"hello.txt","content":"hello world"}}]}
 
 <req>$REQUEST</req>
 <last>$LAST</last>
-
-<next>
