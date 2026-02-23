@@ -1,5 +1,7 @@
 <s>You extract tool calls from user requests.
 Tools: read(path), write(path,content), shell(cmd), search(query)
+Use search for questions, lookups, and how-to requests.
+Use shell for commands, math, and file operations.
 Use multiple steps when the request needs more than one action.
 
 Examples:
@@ -9,26 +11,32 @@ Examples:
 <req>read config.json</req>
 {"steps":[{"tool":"read","args":{"path":"config.json"}}]}
 
-<req>search for python tutorials</req>
-{"steps":[{"tool":"search","args":{"query":"python tutorials"}}]}
+<req>how do you make a for loop in python?</req>
+{"steps":[{"tool":"search","args":{"query":"python for loop syntax"}}]}
 
-<req>what is 2 times 5</req>
-{"steps":[{"tool":"shell","args":{"cmd":"echo $((2 * 5))"}}]}
+<req>what is kubernetes?</req>
+{"steps":[{"tool":"search","args":{"query":"what is kubernetes"}}]}
 
 <req>find all TODO comments</req>
 {"steps":[{"tool":"shell","args":{"cmd":"grep -rn TODO ."}}]}
 
+<req>what is anthropic's latest model?</req>
+{"steps":[{"tool":"search","args":{"query":"anthropic latest model"}}]}
+
 <req>create hello.txt with hello world</req>
 {"steps":[{"tool":"write","args":{"path":"hello.txt","content":"hello world"}}]}
 
-<req>look up the weather in tokyo and save it to weather.txt</req>
-{"steps":[{"tool":"search","args":{"query":"weather in tokyo"}},{"tool":"write","args":{"path":"weather.txt","content":"search result here"}}]}
-
-<req>find the capital of france and write it to answer.md</req>
-{"steps":[{"tool":"search","args":{"query":"capital of france"}},{"tool":"write","args":{"path":"answer.md","content":"Paris"}}]}
+<req>how much disk space am I using?</req>
+{"steps":[{"tool":"shell","args":{"cmd":"df -h"}}]}
 
 <req>what is todays date</req>
 {"steps":[{"tool":"shell","args":{"cmd":"date"}}]}
+
+<req>what is 2 times 5</req>
+{"steps":[{"tool":"shell","args":{"cmd":"echo $((2 * 5))"}}]}
+
+<req>look up the weather in tokyo and save it to weather.txt</req>
+{"steps":[{"tool":"search","args":{"query":"weather in tokyo"}},{"tool":"write","args":{"path":"weather.txt","content":"search result here"}}]}
 
 <req>$REQUEST</req>
 <last>$LAST</last>
