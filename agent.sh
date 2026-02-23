@@ -1,23 +1,39 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 set -uo pipefail
 
 # ── Config ──────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MODEL="$SCRIPT_DIR/models/Qwen2.5-Coder-0.5B-Instruct-Q4_K_M.gguf"
-LLAMA_SERVER="$SCRIPT_DIR/llama.cpp/llama-server"
-PORT=8085
-SEARXNG_URL="https://searx.be"
-MAX_PREDICT=256
-LOG_DIR="$SCRIPT_DIR/logs"
-GRAMMAR_DIR="$SCRIPT_DIR/grammars"
-PROMPT_DIR="$SCRIPT_DIR/prompts"
-BLOCKLIST="$SCRIPT_DIR/blocklist.txt"
+SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
+MODEL="${MODEL:-$SCRIPT_DIR/models/Qwen2.5-Coder-0.5B-Instruct-Q4_K_M.gguf}"
+LLAMA_SERVER="${LLAMA_SERVER:-$SCRIPT_DIR/llama.cpp/llama-server}"
+PORT="${PORT:-8085}"
+SEARXNG_URL="${SEARXNG_URL:-https://searx.be}"
+MAX_PREDICT="${MAX_PREDICT:-256}"
+LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/logs}"
+GRAMMAR_DIR="${GRAMMAR_DIR:-$SCRIPT_DIR/grammars}"
+PROMPT_DIR="${PROMPT_DIR:-$SCRIPT_DIR/prompts}"
+BLOCKLIST="${BLOCKLIST:-$SCRIPT_DIR/blocklist.txt}"
+
+# ── Platform helpers ────────────────────────────────────
+_ncpus() {
+    if command -v nproc > /dev/null 2>&1; then
+        nproc
+    elif sysctl -n hw.ncpu > /dev/null 2>&1; then
+        sysctl -n hw.ncpu
+    else
+        echo 2
+    fi
+}
+
+_ms_timestamp() {
+    # macOS date lacks %N; fall back to seconds
+    date +%s%3N 2>/dev/null || echo "$(date +%s)000"
+}
 
 # ── Session state ───────────────────────────────────────
-SESSION_ID="$(date +%Y%m%d_%H%M%S)_$$"
-LOG_FILE="$LOG_DIR/$SESSION_ID.jsonl"
-LAST_RESULT=""
-SERVER_PID=""
+SESSION_ID="${SESSION_ID:-$(date +%Y%m%d_%H%M%S)_$$}"
+LOG_FILE="${LOG_FILE:-$LOG_DIR/$SESSION_ID.jsonl}"
+LAST_RESULT="${LAST_RESULT:-}"
+SERVER_PID="${SERVER_PID:-}"
 
 # ── Colors ──────────────────────────────────────────────
 RED='\033[0;31m'
@@ -35,7 +51,7 @@ log_event() {
     shift
     local data="$*"
     local ts
-    ts="$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)"
+    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf '{"ts":"%s","event":"%s","data":%s}\n' "$ts" "$event" "$data" >> "$LOG_FILE"
 }
 
@@ -57,7 +73,7 @@ start_server() {
         -m "$MODEL" \
         --port "$PORT" \
         --ctx-size 2048 \
-        --threads "$(nproc)" \
+        --threads "$(_ncpus)" \
         --log-disable \
         > /dev/null 2>&1 &
     SERVER_PID=$!
@@ -97,7 +113,7 @@ call_model() {
     grammar="$(cat "$grammar_file")"
 
     local start_ms
-    start_ms="$(date +%s%3N 2>/dev/null || date +%s)000"
+    start_ms="$(_ms_timestamp)"
 
     local payload
     payload="$(jq -n \
@@ -120,7 +136,7 @@ call_model() {
         -d "$payload" 2>/dev/null)"
 
     local end_ms
-    end_ms="$(date +%s%3N 2>/dev/null || date +%s)000"
+    end_ms="$(_ms_timestamp)"
     local latency=$(( (end_ms - start_ms) ))
 
     local content
@@ -635,4 +651,7 @@ main() {
     done
 }
 
-main "$@"
+# Only run main when executed directly, not when sourced
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
