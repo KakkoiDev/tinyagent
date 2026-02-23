@@ -411,46 +411,18 @@ confirm_and_exec_step() {
     fi
 
     show_step_card "$step_num" "$total" "$tool" "$display"
-    echo -e " ${YELLOW}[r]un  [s]kip  [e]dit  [c]ancel all${RESET}"
-    printf " > "
-    read -n 1 action
-    echo ""
 
-    log_event "user_action" "$(jq -n --arg action "$action" --argjson step "$step_num" \
-        '{step: $step, action: $action}')"
+    while true; do
+        echo -e " ${YELLOW}[r]un  [s]kip  [e]dit  [c]ancel${RESET}"
+        printf " > "
+        read -n 1 action
+        echo ""
 
-    case "$action" in
-        r|R|a|A)
-            log_event "exec_start" "$(jq -n --arg tool "$tool" --arg args "$args_json" \
-                '{tool: $tool, args: $args}')"
-            local result
-            result="$(exec_tool "$tool" "$args_json")"
-            local rc=$?
-            log_event "exec_done" "$(jq -n --arg tool "$tool" --argjson rc "$rc" --arg out "$result" \
-                '{tool: $tool, exit_code: $rc, output: $out}')"
-            format_output "$result"
-            LAST_RESULT="$(summarize_result "$tool" "$result")"
-            return 0
-            ;;
-        s|S)
-            echo -e "${DIM}Skipped.${RESET}"
-            return 0
-            ;;
-        e|E)
-            if [ "$tool" = "shell" ]; then
-                local cmd
-                cmd="$(echo "$args_json" | jq -r '.cmd // empty')"
-                echo -e " ${DIM}Edit command:${RESET}"
-                read -e -i "$cmd" new_cmd
-                # Re-validate edited command
-                local blocked_pattern
-                if ! blocked_pattern="$(validate_command "$new_cmd")"; then
-                    show_blocked_card "$new_cmd" "$blocked_pattern"
-                    log_event "blocked" "$(jq -n --arg cmd "$new_cmd" --arg pattern "$blocked_pattern" \
-                        '{cmd: $cmd, pattern: $pattern}')"
-                    return 1
-                fi
-                args_json="$(jq -n --arg cmd "$new_cmd" '{cmd: $cmd}')"
+        log_event "user_action" "$(jq -n --arg action "$action" --argjson step "$step_num" \
+            '{step: $step, action: $action}')"
+
+        case "$action" in
+            r|R)
                 log_event "exec_start" "$(jq -n --arg tool "$tool" --arg args "$args_json" \
                     '{tool: $tool, args: $args}')"
                 local result
@@ -460,24 +432,53 @@ confirm_and_exec_step() {
                     '{tool: $tool, exit_code: $rc, output: $out}')"
                 format_output "$result"
                 LAST_RESULT="$(summarize_result "$tool" "$result")"
-            else
-                echo -e "${DIM}Edit only supported for shell commands. Running as-is.${RESET}"
-                local result
-                result="$(exec_tool "$tool" "$args_json")"
-                format_output "$result"
-                LAST_RESULT="$(summarize_result "$tool" "$result")"
-            fi
-            return 0
-            ;;
-        c|C)
-            echo -e "${RED}Cancelled.${RESET}"
-            return 2
-            ;;
-        *)
-            echo -e "${DIM}Unknown action, skipping.${RESET}"
-            return 0
-            ;;
-    esac
+                return 0
+                ;;
+            s|S)
+                echo -e "${DIM}Skipped.${RESET}"
+                return 0
+                ;;
+            e|E)
+                if [ "$tool" = "shell" ]; then
+                    local cmd
+                    cmd="$(echo "$args_json" | jq -r '.cmd // empty')"
+                    echo -e " ${DIM}Edit command:${RESET}"
+                    read -e -i "$cmd" new_cmd
+                    local blocked_pattern
+                    if ! blocked_pattern="$(validate_command "$new_cmd")"; then
+                        show_blocked_card "$new_cmd" "$blocked_pattern"
+                        log_event "blocked" "$(jq -n --arg cmd "$new_cmd" --arg pattern "$blocked_pattern" \
+                            '{cmd: $cmd, pattern: $pattern}')"
+                        return 1
+                    fi
+                    args_json="$(jq -n --arg cmd "$new_cmd" '{cmd: $cmd}')"
+                    log_event "exec_start" "$(jq -n --arg tool "$tool" --arg args "$args_json" \
+                        '{tool: $tool, args: $args}')"
+                    local result
+                    result="$(exec_tool "$tool" "$args_json")"
+                    local rc=$?
+                    log_event "exec_done" "$(jq -n --arg tool "$tool" --argjson rc "$rc" --arg out "$result" \
+                        '{tool: $tool, exit_code: $rc, output: $out}')"
+                    format_output "$result"
+                    LAST_RESULT="$(summarize_result "$tool" "$result")"
+                else
+                    echo -e "${DIM}Edit only supported for shell commands. Running as-is.${RESET}"
+                    local result
+                    result="$(exec_tool "$tool" "$args_json")"
+                    format_output "$result"
+                    LAST_RESULT="$(summarize_result "$tool" "$result")"
+                fi
+                return 0
+                ;;
+            c|C)
+                echo -e "${RED}Cancelled.${RESET}"
+                return 2
+                ;;
+            *)
+                echo -e " ${DIM}Press r, s, e, or c${RESET}"
+                ;;
+        esac
+    done
 }
 
 # ── Pipeline ────────────────────────────────────────────
