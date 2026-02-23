@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODEL_DIR="$SCRIPT_DIR/models"
 LLAMA_DIR="$SCRIPT_DIR/llama.cpp"
-MODEL_NAME="Qwen2.5-Coder-0.5B-Instruct-Q4_K_M.gguf"
+MODEL_NAME="qwen2.5-coder-0.5b-instruct-q4_k_m.gguf"
 MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF/resolve/main/$MODEL_NAME"
 
 # ── Platform detection ──────────────────────────────────
@@ -73,11 +73,20 @@ cmake --build build --config Release -j"$(ncpus)" --target llama-server
 
 # ── Download model ──────────────────────────────────────
 mkdir -p "$MODEL_DIR"
-if [ -f "$MODEL_DIR/$MODEL_NAME" ]; then
+MIN_MODEL_SIZE=100000000  # ~100MB minimum for a valid GGUF
+if [ -f "$MODEL_DIR/$MODEL_NAME" ] && [ "$(stat -c%s "$MODEL_DIR/$MODEL_NAME" 2>/dev/null || stat -f%z "$MODEL_DIR/$MODEL_NAME" 2>/dev/null)" -gt "$MIN_MODEL_SIZE" ]; then
     echo "[3/4] Model already downloaded."
 else
+    rm -f "$MODEL_DIR/$MODEL_NAME"
     echo "[3/4] Downloading model ($MODEL_NAME)..."
-    curl -L -o "$MODEL_DIR/$MODEL_NAME" "$MODEL_URL"
+    curl -L --fail -o "$MODEL_DIR/$MODEL_NAME" "$MODEL_URL"
+    # Verify download
+    local_size="$(stat -c%s "$MODEL_DIR/$MODEL_NAME" 2>/dev/null || stat -f%z "$MODEL_DIR/$MODEL_NAME" 2>/dev/null)"
+    if [ "$local_size" -lt "$MIN_MODEL_SIZE" ]; then
+        echo "Error: Downloaded file too small (${local_size} bytes). Download likely failed."
+        rm -f "$MODEL_DIR/$MODEL_NAME"
+        exit 1
+    fi
 fi
 
 # ── Platform-specific setup ─────────────────────────────

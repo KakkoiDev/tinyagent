@@ -3,7 +3,7 @@ set -uo pipefail
 
 # ── Config ──────────────────────────────────────────────
 SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
-MODEL="${MODEL:-$SCRIPT_DIR/models/Qwen2.5-Coder-0.5B-Instruct-Q4_K_M.gguf}"
+MODEL="${MODEL:-$SCRIPT_DIR/models/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf}"
 LLAMA_SERVER="${LLAMA_SERVER:-$SCRIPT_DIR/llama.cpp/build/bin/llama-server}"
 PORT="${PORT:-8085}"
 SEARXNG_URL="${SEARXNG_URL:-https://searx.be}"
