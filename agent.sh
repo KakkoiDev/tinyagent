@@ -223,6 +223,33 @@ summarize_result() {
     esac
 }
 
+# ── Output formatter ────────────────────────────────────
+format_output() {
+    local raw="$1"
+    # Detect search results JSON (array with title/url/snippet)
+    if echo "$raw" | jq -e '.[0].title' > /dev/null 2>&1; then
+        local count
+        count="$(echo "$raw" | jq 'length')"
+        local i=0
+        while [ $i -lt "$count" ]; do
+            local title url snippet
+            title="$(echo "$raw" | jq -r ".[$i].title" | sed 's/&#x27;/'"'"'/g; s/&amp;/\&/g; s/&lt;/</g; s/&gt;/>/g')"
+            url="$(echo "$raw" | jq -r ".[$i].url")"
+            snippet="$(echo "$raw" | jq -r ".[$i].snippet" | sed 's/&#x27;/'"'"'/g; s/&amp;/\&/g; s/&lt;/</g; s/&gt;/>/g')"
+            echo ""
+            echo -e "  ${BOLD}$title${RESET}"
+            echo -e "  ${DIM}$snippet${RESET}"
+            # OSC 8 clickable link
+            printf "  \e]8;;%s\e\\%s\e]8;;\e\\\\\n" "$url" "$url"
+            i=$((i + 1))
+        done
+        echo ""
+        return
+    fi
+    # Default: dim text
+    echo -e "${DIM}$raw${RESET}"
+}
+
 # ── Tool execution ──────────────────────────────────────
 exec_tool() {
     local tool="$1"
@@ -367,7 +394,7 @@ confirm_and_exec_step() {
             local rc=$?
             log_event "exec_done" "$(jq -n --arg tool "$tool" --argjson rc "$rc" --arg out "$result" \
                 '{tool: $tool, exit_code: $rc, output: $out}')"
-            echo -e "${DIM}$result${RESET}"
+            format_output "$result"
             LAST_RESULT="$(summarize_result "$tool" "$result")"
             return 0
             ;;
@@ -397,13 +424,13 @@ confirm_and_exec_step() {
                 local rc=$?
                 log_event "exec_done" "$(jq -n --arg tool "$tool" --argjson rc "$rc" --arg out "$result" \
                     '{tool: $tool, exit_code: $rc, output: $out}')"
-                echo -e "${DIM}$result${RESET}"
+                format_output "$result"
                 LAST_RESULT="$(summarize_result "$tool" "$result")"
             else
                 echo -e "${DIM}Edit only supported for shell commands. Running as-is.${RESET}"
                 local result
                 result="$(exec_tool "$tool" "$args_json")"
-                echo -e "${DIM}$result${RESET}"
+                format_output "$result"
                 LAST_RESULT="$(summarize_result "$tool" "$result")"
             fi
             return 0
@@ -553,7 +580,7 @@ process_input() {
                 local rc=$?
                 log_event "exec_done" "$(jq -n --arg tool "$tool" --argjson rc "$rc" --arg out "$result" \
                     '{tool: $tool, exit_code: $rc, output: $out}')"
-                echo -e "${DIM}$result${RESET}"
+                format_output "$result"
                 LAST_RESULT="$(summarize_result "$tool" "$result")"
                 i=$((i + 1))
             done
