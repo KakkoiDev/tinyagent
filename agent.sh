@@ -308,7 +308,7 @@ exec_tool() {
                 echo "err: no query specified"
                 return 1
             fi
-            # Step 1: DDG search (deterministic)
+            # DDG search → keyword-score snippets → return best snippet + URL
             local results
             results="$(bash "$SCRIPT_DIR/search.sh" "$query" 3)" || true
             local result_count
@@ -318,8 +318,8 @@ exec_tool() {
                 echo "$output"
                 return $exit_code
             fi
-            # Step 2: Pick best result by query-word overlap in snippets (deterministic)
-            local idx=1 best_score=0
+            # Pick best snippet by query-word overlap (deterministic)
+            local best_idx=0 best_score=0
             local i=0
             while [ $i -lt "$result_count" ]; do
                 local snippet score=0
@@ -334,63 +334,14 @@ exec_tool() {
                 done
                 if [ "$score" -gt "$best_score" ]; then
                     best_score="$score"
-                    idx=$((i + 1))
+                    best_idx=$i
                 fi
                 i=$((i + 1))
             done
-            local url
-            url="$(printf '%s' "$results" | jq -r ".[$((idx-1))].url")"
-            # Step 3: Fetch page (deterministic)
-            local page_text
-            page_text="$(bash "$SCRIPT_DIR/fetch.sh" "$url" 80 2>/dev/null)" || true
-            local fetch_lines
-            fetch_lines="$(echo "$page_text" | wc -l | tr -d ' ')"
-            if [ -z "$page_text" ] || [ "$page_text" = "1	(fetch failed)" ] || [ "$fetch_lines" -lt 5 ]; then
-                # Fallback to DDG snippet (fetch produced too little usable content)
-                local snippet
-                snippet="$(printf '%s' "$results" | jq -r ".[$((idx-1))].snippet // empty")"
-                output="$(jq -n --arg s "$snippet" --arg u "$url" '{answer:$s,url:$u}')"
-                echo "$output"
-                return $exit_code
-            fi
-            # Step 4: Pick best line by query-keyword overlap + length (deterministic)
-            local best_line="" best_score=0
-            while IFS= read -r raw_line; do
-                # Strip line number prefix
-                local line_text
-                line_text="$(echo "$raw_line" | sed 's/^[[:space:]]*[0-9]*[[:space:]]*//')"
-                # Strip markdown links/images for cleaner matching and length check
-                local clean
-                clean="$(echo "$line_text" | sed 's/\[!\[[^]]*\]([^)]*)//g; s/\[[^]]*\]([^)]*)//g; s/[*#\[\]()]//g' | sed 's/^ *//')"
-                # Skip short lines after cleaning (nav items, link-only lines)
-                [ "${#clean}" -lt 30 ] && continue
-                local clean_lower
-                clean_lower="$(echo "$clean" | tr '[:upper:]' '[:lower:]')"
-                local score=0 qw
-                for qw in $query; do
-                    qw="$(echo "$qw" | tr '[:upper:]' '[:lower:]')"
-                    [ "${#qw}" -lt 3 ] && continue
-                    if echo "$clean_lower" | grep -qiF "$qw"; then
-                        score=$((score + 1))
-                    fi
-                done
-                # Bonus for longer content lines (real paragraphs)
-                [ "${#clean}" -gt 80 ] && score=$((score + 1))
-                if [ "$score" -gt "$best_score" ]; then
-                    best_score="$score"
-                    best_line="$clean"
-                fi
-            done <<< "$page_text"
-            local sentence="$best_line"
-            # Fallback to DDG snippet if no good line found
-            if [ -z "$sentence" ] || [ "$best_score" -eq 0 ]; then
-                local snippet
-                snippet="$(printf '%s' "$results" | jq -r ".[$((idx-1))].snippet // empty")"
-                if [ -n "$snippet" ]; then
-                    sentence="$snippet"
-                fi
-            fi
-            output="$(jq -n --arg s "$sentence" --arg u "$url" '{answer:$s,url:$u}')"
+            local snippet url
+            snippet="$(printf '%s' "$results" | jq -r ".[$best_idx].snippet // empty")"
+            url="$(printf '%s' "$results" | jq -r ".[$best_idx].url // empty")"
+            output="$(jq -n --arg s "$snippet" --arg u "$url" '{answer:$s,url:$u}')"
             ;;
         *)
             echo "err: unknown tool: $tool"
