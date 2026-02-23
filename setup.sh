@@ -35,24 +35,24 @@ echo "=== miniagents setup ($PLATFORM) ==="
 echo "[1/4] Installing packages..."
 case "$PLATFORM" in
     termux)
-        pkg install -y jq make clang git curl
+        pkg install -y jq cmake clang git curl
         ;;
     macos)
         if ! command -v brew > /dev/null 2>&1; then
             echo "Error: Homebrew required. Install from https://brew.sh"
             exit 1
         fi
-        brew install jq llvm curl git
+        brew install jq cmake llvm curl git
         ;;
     linux)
         if command -v apt-get > /dev/null 2>&1; then
-            sudo apt-get update -qq && sudo apt-get install -y jq make clang git curl build-essential
+            sudo apt-get update -qq && sudo apt-get install -y jq cmake clang git curl build-essential
         elif command -v dnf > /dev/null 2>&1; then
-            sudo dnf install -y jq make clang git curl
+            sudo dnf install -y jq cmake clang git curl
         elif command -v pacman > /dev/null 2>&1; then
-            sudo pacman -Sy --noconfirm jq make clang git curl
+            sudo pacman -Sy --noconfirm jq cmake clang git curl
         else
-            echo "Warning: Unknown package manager. Install manually: jq make clang git curl"
+            echo "Warning: Unknown package manager. Install manually: jq cmake clang git curl"
         fi
         ;;
 esac
@@ -66,9 +66,10 @@ else
     git clone --depth 1 https://github.com/ggerganov/llama.cpp "$LLAMA_DIR"
 fi
 
-echo "[2/4] Building llama.cpp..."
+echo "[2/4] Building llama.cpp (cmake)..."
 cd "$LLAMA_DIR"
-make -j"$(ncpus)" llama-server
+cmake -B build -DLLAMA_CURL=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF
+cmake --build build --config Release -j"$(ncpus)" --target llama-server
 
 # ── Download model ──────────────────────────────────────
 mkdir -p "$MODEL_DIR"
@@ -97,5 +98,5 @@ echo ""
 echo "=== Setup complete ==="
 echo "Platform: $PLATFORM"
 echo "Model: $MODEL_DIR/$MODEL_NAME"
-echo "Server: $LLAMA_DIR/llama-server"
+echo "Server: $LLAMA_DIR/build/bin/llama-server"
 echo "Run: bash agent.sh"
