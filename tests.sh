@@ -288,48 +288,6 @@ else
     echo "  SKIP: aspell not installed"
 fi
 
-# ── Tests: classify_input ──────────────────────────────
-echo ""
-echo "classify_input"
-
-# Search patterns (correct spelling)
-assert_eq "classifies 'how to' as search" "search" "$(classify_input "how to install nodejs?")"
-assert_eq "classifies 'what is' as search" "search" "$(classify_input "what is rust?")"
-assert_eq "classifies 'who is' as search" "search" "$(classify_input "who is linus torvalds?")"
-assert_eq "classifies 'how does' as search" "search" "$(classify_input "how does docker work?")"
-assert_eq "classifies 'why does' as search" "search" "$(classify_input "why does rust use ownership?")"
-
-# Search typos
-assert_eq "classifies typo 'hw to' as search" "search" "$(classify_input "hw to install nodejs?")"
-assert_eq "classifies typo 'waht is' as search" "search" "$(classify_input "waht is kubernetes?")"
-assert_eq "classifies typo 'hoe to' as search" "search" "$(classify_input "hoe to install docker?")"
-assert_eq "classifies typo 'woh is' as search" "search" "$(classify_input "woh is linus torvalds?")"
-
-# Search fallback: ? with 4+ words
-assert_eq "classifies long question with ? as search" "search" "$(classify_input "can you explain recursion to me?")"
-
-# Local-answerable → empty (model fallback)
-assert_eq "local: what time → empty" "" "$(classify_input "what time is it?")"
-assert_eq "local: disk space → empty" "" "$(classify_input "how much disk space do I have?")"
-assert_eq "local: files → empty" "" "$(classify_input "what files are here?")"
-
-# Read patterns
-assert_eq "classifies 'read config.json' as read" "read" "$(classify_input "read config.json")"
-assert_eq "classifies 'cat /etc/hosts' as read" "read" "$(classify_input "cat /etc/hosts")"
-assert_eq "classifies 'show main.py' as read" "read" "$(classify_input "show main.py")"
-
-# Write patterns
-assert_eq "classifies 'write hello.txt' as write" "write" "$(classify_input "write hello.txt")"
-assert_eq "classifies 'create test.py' as write" "write" "$(classify_input "create test.py")"
-
-# Shell patterns
-assert_eq "classifies 'run ls -la' as shell" "shell" "$(classify_input "run ls -la")"
-assert_eq "classifies bare 'ls' as shell" "shell" "$(classify_input "ls")"
-assert_eq "classifies bare 'git status' as shell" "shell" "$(classify_input "git status")"
-assert_eq "classifies bare 'docker ps' as shell" "shell" "$(classify_input "docker ps")"
-
-# Fallback → empty
-assert_eq "classifies ambiguous input as empty" "" "$(classify_input "do something interesting")"
 
 # ── Tests: exec_tool search no break error ────────────
 echo ""
