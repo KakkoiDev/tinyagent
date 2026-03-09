@@ -603,6 +603,7 @@ spellcheck() {
 # ── Pipeline ────────────────────────────────────────────
 process_input() {
     local request="$1"
+    LAST_RESULT=""
 
     log_event "user_input" "$(jq -n --arg req "$request" '{request: $req}')"
 
