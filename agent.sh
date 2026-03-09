@@ -488,7 +488,7 @@ confirm_and_exec() {
                 if [ -n "$edit_field" ]; then
                     edit_value="$(echo "$args_json" | jq -r ".$edit_field // empty")"
                     printf " ${DIM}Edit $edit_label:${RESET}\n"
-                    new_value="$(zsh -c 'val="$1"; vared -p " > " val; echo "$val"' -- "$edit_value")"
+                    read -r -e -i "$edit_value" -p " > " new_value
                     [ -z "$new_value" ] && new_value="$edit_value"
                     if [ "$tool" = "shell" ]; then
                         local blocked_pattern
@@ -588,7 +588,7 @@ process_input() {
             return
         elif [ "$spell_action" = "e" ] || [ "$spell_action" = "E" ]; then
             local edited
-            edited="$(zsh -c 'val="$1"; vared -p "  > " val; echo "$val"' -- "$corrected")"
+            read -r -e -i "$corrected" -p "  > " edited
             [ -n "$edited" ] && process_input "$edited"
             return
         fi
