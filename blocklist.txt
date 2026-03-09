@@ -1,4 +1,5 @@
-rm\s+-rf\s+[/~.]
+rm\s+-[a-z]*r[a-z]*f[a-z]*\s+[/~.]
+rm\s+-[a-z]*f[a-z]*r[a-z]*\s+[/~.]
 rm\s+-r\s+[/~.]
 mkfs\.
 dd\s+if=
