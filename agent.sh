@@ -562,8 +562,14 @@ spellcheck() {
                 orig_first="$(echo "${misspelled:0:1}" | tr '[:upper:]' '[:lower:]')"
                 sugg_first="$(echo "${suggestion:0:1}" | tr '[:upper:]' '[:lower:]')"
                 [ "$orig_first" != "$sugg_first" ] && continue
-                # Replace first occurrence (word-boundary safe via sed word match)
-                corrected="$(echo "$corrected" | sed "s/\b${misspelled}\b/${suggestion}/i")"
+                # Replace first occurrence (portable word boundary)
+                if sed --version >/dev/null 2>&1; then
+                    # GNU sed
+                    corrected="$(echo "$corrected" | sed "s/\b${misspelled}\b/${suggestion}/i")"
+                else
+                    # BSD sed (macOS)
+                    corrected="$(echo "$corrected" | sed "s/[[:<:]]${misspelled}[[:>:]]/${suggestion}/")"
+                fi
                 ;;
         esac
     done <<< "$(echo "$input" | aspell -a 2>/dev/null)"
