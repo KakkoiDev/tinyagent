@@ -16,7 +16,7 @@ if [ -z "$raw" ]; then
 fi
 
 # Parse: extract non-sponsored result-link titles/urls and result-snippet text
-# Use awk to pair them up
+# POSIX-compatible awk (no 3-arg match - works on macOS BSD awk and gawk)
 echo "$raw" | awk -v max="$MAX" '
 BEGIN { n=0; in_sponsored=0; title=""; url=""; ORS="" }
 
@@ -24,13 +24,16 @@ BEGIN { n=0; in_sponsored=0; title=""; url=""; ORS="" }
 
 # Detect organic result rows (not sponsored)
 /class=.result-link./ && !in_sponsored {
-    # Extract URL
-    match($0, /href="([^"]+)"/, arr)
-    url = arr[1]
+    # Extract URL from href="..."
+    s = $0
+    if (match(s, /href="[^"]+"/)) {
+        url = substr(s, RSTART+6, RLENGTH-7)
+    }
     # Extract title (text between > and </a>)
-    match($0, /class='\''result-link'\''>[^<]*/, arr2)
-    if (arr2[0] != "") {
-        title = substr(arr2[0], index(arr2[0], ">") + 1)
+    if (match(s, /result-link.>[^<]*/)) {
+        t = substr(s, RSTART, RLENGTH)
+        idx = index(t, ">")
+        if (idx > 0) title = substr(t, idx+1)
     }
     # Skip DDG internal links
     if (url ~ /duckduckgo\.com/ || url ~ /^$/) { url=""; title=""; next }
