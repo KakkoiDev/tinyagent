@@ -29,7 +29,7 @@ ncpus() {
 }
 
 PLATFORM="$(detect_platform)"
-echo "=== miniagents setup ($PLATFORM) ==="
+echo "=== tinyagent setup ($PLATFORM) ==="
 
 # ── Install packages ────────────────────────────────────
 echo "[1/5] Installing packages..."

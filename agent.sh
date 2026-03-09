@@ -787,7 +787,7 @@ run_search() {
 main() {
     mkdir -p "$LOG_DIR"
 
-    echo -e "${BOLD}miniagents${RESET} ${DIM}v0.1${RESET}"
+    echo -e "${BOLD}tinyagent${RESET} ${DIM}v0.1${RESET}"
     echo -e "${DIM}Session: $SESSION_ID${RESET}"
     echo ""
 

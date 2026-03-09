@@ -35,8 +35,11 @@ Examples:
 <req>what is 2 times 5</req>
 {"steps":[{"tool":"shell","args":{"cmd":"echo $((2 * 5))"}}]}
 
-<req>look up the weather in tokyo and save it to weather.txt</req>
-{"steps":[{"tool":"search","args":{"query":"weather in tokyo"}},{"tool":"write","args":{"path":"weather.txt","content":"search result here"}}]}
+<req>how do I install docker?</req>
+{"steps":[{"tool":"search","args":{"query":"how to install docker"}}]}
+
+<req>read config.json and create a backup</req>
+{"steps":[{"tool":"read","args":{"path":"config.json"}},{"tool":"write","args":{"path":"config.json.bak","content":"backup"}}]}
 
 <req>$REQUEST</req>
 <last>$LAST</last>
