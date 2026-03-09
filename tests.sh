@@ -233,20 +233,6 @@ assert_rc "extract.gbnf exists and non-empty" 0 $?
 [ -s "$SCRIPT_DIR/grammars/order.gbnf" ]
 assert_rc "order.gbnf exists and non-empty" 0 $?
 
-# ── Tests: fetch.sh ────────────────────────────────────
-echo ""
-echo "fetch.sh"
-
-out="$(bash "$SCRIPT_DIR/fetch.sh" "https://example.com" 10 2>/dev/null)"
-rc=$?
-assert_rc "fetch.sh returns success for example.com" 0 $rc
-assert_contains "fetch.sh output has numbered lines" "1" "$out"
-
-out="$(bash "$SCRIPT_DIR/fetch.sh" "https://example.com" 5 2>/dev/null)"
-line_count="$(echo "$out" | wc -l | tr -d ' ')"
-[ "$line_count" -le 6 ]
-assert_rc "fetch.sh respects max_lines" 0 $?
-
 
 # ── Tests: format_output with answer JSON ─────────────
 echo ""

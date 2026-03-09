@@ -109,8 +109,7 @@ JSONL files in `logs/`, one per session. Events: `user_input`, `model_raw`, `par
 ```
 tinyagent/
   agent.sh          Main REPL loop and tool execution
-  search.sh         DuckDuckGo Lite scraper
-  fetch.sh          Web content fetcher (lightpanda or curl fallback)
+  search.sh         DuckDuckGo search (lightpanda or curl fallback)
   setup.sh          One-time platform setup
   tests.sh          Test suite
   blocklist.txt     Dangerous command patterns (regex)
