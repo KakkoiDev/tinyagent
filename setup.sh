@@ -96,7 +96,11 @@ fi
 
 echo "[3/5] Building llama.cpp (cmake)..."
 cd "$LLAMA_DIR"
-cmake -B build -DLLAMA_CURL=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF
+if [ "$(detect_platform)" = "macos" ]; then
+    cmake -B build -DLLAMA_CURL=OFF -DGGML_CUDA=OFF -DGGML_METAL=ON
+else
+    cmake -B build -DLLAMA_CURL=OFF -DGGML_CUDA=OFF -DGGML_METAL=OFF
+fi
 cmake --build build --config Release -j"$(ncpus)" --target llama-server
 
 # ── Download model ──────────────────────────────────────

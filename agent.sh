@@ -96,11 +96,16 @@ start_server() {
     fi
 
     echo -e "${DIM}Starting server...${RESET}"
+    local gpu_flags=()
+    if [[ "$OSTYPE" == darwin* ]]; then
+        gpu_flags=(--gpu-layers 99)
+    fi
     "$LLAMA_SERVER" \
         -m "$MODEL" \
         --port "$PORT" \
         --ctx-size 2048 \
         --threads "$(_ncpus)" \
+        "${gpu_flags[@]}" \
         --log-disable \
         > /dev/null 2>&1 &
     SERVER_PID=$!
