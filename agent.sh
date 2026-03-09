@@ -504,19 +504,27 @@ confirm_and_exec_step() {
                 return 0
                 ;;
             e|E)
-                if [ "$tool" = "shell" ]; then
-                    local cmd
-                    cmd="$(echo "$args_json" | jq -r '.cmd // empty')"
-                    echo -e " ${DIM}Edit command:${RESET}"
-                    read -e -i "$cmd" new_cmd
-                    local blocked_pattern
-                    if ! blocked_pattern="$(validate_command "$new_cmd")"; then
-                        show_blocked_card "$new_cmd" "$blocked_pattern"
-                        log_event "blocked" "$(jq -n --arg cmd "$new_cmd" --arg pattern "$blocked_pattern" \
-                            '{cmd: $cmd, pattern: $pattern}')"
-                        return 1
+                local edit_field edit_value edit_label
+                case "$tool" in
+                    shell)  edit_field="cmd";   edit_label="command" ;;
+                    search) edit_field="query"; edit_label="query" ;;
+                    read)   edit_field="path";  edit_label="path" ;;
+                    *)      edit_field="" ;;
+                esac
+                if [ -n "$edit_field" ]; then
+                    edit_value="$(echo "$args_json" | jq -r ".$edit_field // empty")"
+                    echo -e " ${DIM}Edit $edit_label:${RESET}"
+                    read -e -i "$edit_value" new_value
+                    if [ "$tool" = "shell" ]; then
+                        local blocked_pattern
+                        if ! blocked_pattern="$(validate_command "$new_value")"; then
+                            show_blocked_card "$new_value" "$blocked_pattern"
+                            log_event "blocked" "$(jq -n --arg cmd "$new_value" --arg pattern "$blocked_pattern" \
+                                '{cmd: $cmd, pattern: $pattern}')"
+                            return 1
+                        fi
                     fi
-                    args_json="$(jq -n --arg cmd "$new_cmd" '{cmd: $cmd}')"
+                    args_json="$(echo "$args_json" | jq --arg v "$new_value" ".$edit_field = \$v")"
                     log_event "exec_start" "$(jq -n --arg tool "$tool" --arg args "$args_json" \
                         '{tool: $tool, args: $args}')"
                     local result
@@ -527,7 +535,7 @@ confirm_and_exec_step() {
                     format_output "$result"
                     LAST_RESULT="$(summarize_result "$tool" "$result")"
                 else
-                    echo -e "${DIM}Edit only supported for shell commands. Running as-is.${RESET}"
+                    echo -e "${DIM}Edit not supported for $tool. Running as-is.${RESET}"
                     local result
                     result="$(exec_tool "$tool" "$args_json")"
                     format_output "$result"
