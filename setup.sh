@@ -35,22 +35,22 @@ echo "=== tinyagent setup ($PLATFORM) ==="
 echo "[1/5] Installing packages..."
 case "$PLATFORM" in
     termux)
-        pkg install -y jq cmake clang git curl
+        pkg install -y jq cmake clang git curl aspell
         ;;
     macos)
         if ! command -v brew > /dev/null 2>&1; then
             echo "Error: Homebrew required. Install from https://brew.sh"
             exit 1
         fi
-        brew install jq cmake llvm curl git
+        brew install jq cmake llvm curl git aspell
         ;;
     linux)
         if command -v apt-get > /dev/null 2>&1; then
-            sudo apt-get update -qq && sudo apt-get install -y jq cmake clang git curl build-essential
+            sudo apt-get update -qq && sudo apt-get install -y jq cmake clang git curl build-essential aspell
         elif command -v dnf > /dev/null 2>&1; then
-            sudo dnf install -y jq cmake clang git curl
+            sudo dnf install -y jq cmake clang git curl aspell
         elif command -v pacman > /dev/null 2>&1; then
-            sudo pacman -Sy --noconfirm jq cmake clang git curl
+            sudo pacman -Sy --noconfirm jq cmake clang git curl aspell
         else
             echo "Warning: Unknown package manager. Install manually: jq cmake clang git curl"
         fi
