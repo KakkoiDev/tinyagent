@@ -1,4 +1,4 @@
-root ::= "{\"plan\":[" step ("," step)* "]}"
+root ::= "{\"plan\":[" step "]}"
 
 step ::= read-step | write-step | shell-step | search-step
 

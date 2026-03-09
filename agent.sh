@@ -185,24 +185,6 @@ call_model() {
 }
 
 # ── Prompt builders ─────────────────────────────────────
-build_extract_prompt() {
-    local request="$1"
-    local last="$2"
-    local template
-    template="$(cat "$PROMPT_DIR/extract.txt")"
-    template="${template//\$REQUEST/$request}"
-    template="${template//\$LAST/$last}"
-    echo "$template"
-}
-
-build_order_prompt() {
-    local steps="$1"
-    local template
-    template="$(cat "$PROMPT_DIR/order.txt")"
-    template="${template//\$STEPS/$steps}"
-    echo "$template"
-}
-
 build_plan_prompt() {
     local request="$1"
     local last="$2"
@@ -404,15 +386,13 @@ exec_tool() {
 }
 
 # ── UI helpers ──────────────────────────────────────────
-show_step_card() {
-    local step_num="$1"
-    local total="$2"
-    local tool="$3"
-    local display="$4"
+show_tool_card() {
+    local tool="$1"
+    local display="$2"
 
     echo ""
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-    echo -e " ${CYAN}Step $step_num/$total: ${tool}${RESET}"
+    echo -e " ${CYAN}${tool}${RESET}"
     echo -e " ${DIM}>${RESET} $display"
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 }
@@ -453,12 +433,10 @@ get_display_text() {
     esac
 }
 
-# ── Step confirmation and execution ─────────────────────
-confirm_and_exec_step() {
-    local step_num="$1"
-    local total="$2"
-    local tool="$3"
-    local args_json="$4"
+# ── Confirmation and execution ──────────────────────────
+confirm_and_exec() {
+    local tool="$1"
+    local args_json="$2"
     local display
     display="$(get_display_text "$tool" "$args_json")"
 
@@ -475,17 +453,16 @@ confirm_and_exec_step() {
         fi
     fi
 
-    show_step_card "$step_num" "$total" "$tool" "$display"
+    show_tool_card "$tool" "$display"
 
     while true; do
-        echo -e " ${YELLOW}[r]un  [s]kip  [e]dit  [c]ancel${RESET}"
+        echo -e " ${YELLOW}[r]un  [e]dit  [c]ancel${RESET}"
         printf " > "
         read -n 1 action
         read -t 0.1 -r _ 2>/dev/null || true
         echo ""
 
-        log_event "user_action" "$(jq -n --arg action "$action" --argjson step "$step_num" \
-            '{step: $step, action: $action}')"
+        log_event "user_action" "$(jq -n --arg action "$action" '{action: $action}')"
 
         case "$action" in
             r|R)
@@ -498,10 +475,6 @@ confirm_and_exec_step() {
                     '{tool: $tool, exit_code: $rc, output: $out}')"
                 format_output "$result"
                 LAST_RESULT="$(summarize_result "$tool" "$result")"
-                return 0
-                ;;
-            s|S)
-                echo -e "${DIM}Skipped.${RESET}"
                 return 0
                 ;;
             e|E)
@@ -550,7 +523,7 @@ confirm_and_exec_step() {
                 return 2
                 ;;
             *)
-                echo -e " ${DIM}Press r, s, e, or c${RESET}"
+                echo -e " ${DIM}Press r, e, or c${RESET}"
                 ;;
         esac
     done
@@ -636,106 +609,18 @@ process_input() {
         return
     fi
 
-    local step_count
-    step_count="$(echo "$plan_output" | jq '.plan | length' 2>/dev/null)" || step_count=0
-    if [ "$step_count" -eq 0 ]; then
+    local tool args
+    tool="$(echo "$plan_output" | jq -r '.plan[0].tool // empty')"
+    args="$(echo "$plan_output" | jq -c '.plan[0].args // empty')"
+    if [ -z "$tool" ]; then
         echo -e "${RED}Failed to parse model output.${RESET}"
         log_event "parse_result" '{"success":false}'
         return
     fi
 
-    log_event "parse_result" "$(jq -n --argjson count "$step_count" --arg raw "$plan_output" \
-        '{success: true, step_count: $count, raw: $raw}')"
+    log_event "parse_result" "$(jq -n --arg raw "$plan_output" '{success: true, raw: $raw}')"
 
-    if [ "$step_count" -eq 1 ]; then
-        local tool args
-        tool="$(echo "$plan_output" | jq -r '.plan[0].tool')"
-        args="$(echo "$plan_output" | jq -c '.plan[0].args')"
-        confirm_and_exec_step 1 1 "$tool" "$args"
-        return
-    fi
-
-    # Multi-step — show plan and confirm
-    echo ""
-    echo -e "${BOLD}Plan ($step_count steps):${RESET}"
-    local i=0
-    while [ $i -lt "$step_count" ]; do
-        local tool display args_json
-        tool="$(echo "$plan_output" | jq -r ".plan[$i].tool")"
-        args_json="$(echo "$plan_output" | jq -c ".plan[$i].args")"
-        display="$(get_display_text "$tool" "$args_json")"
-        echo -e "  ${CYAN}$((i+1)).${RESET} ${tool}: $display"
-        i=$((i + 1))
-    done
-
-    log_event "plan_shown" "$(jq -n --argjson count "$step_count" '{step_count: $count}')"
-
-    echo ""
-    echo -e "${YELLOW}[a]pprove all  [s]tep-by-step  [e]dit  [c]ancel${RESET}"
-    printf "> "
-    read -n 1 plan_action
-    echo ""
-
-    log_event "user_action" "$(jq -n --arg action "$plan_action" '{plan_action: $action}')"
-
-    case "$plan_action" in
-        a|A)
-            local i=0
-            while [ $i -lt "$step_count" ]; do
-                local tool args_json
-                tool="$(echo "$plan_output" | jq -r ".plan[$i].tool")"
-                args_json="$(echo "$plan_output" | jq -c ".plan[$i].args")"
-
-                local display
-                display="$(get_display_text "$tool" "$args_json")"
-                echo -e "${CYAN}[$((i+1))/$step_count]${RESET} $tool: $display"
-
-                if [ "$tool" = "shell" ]; then
-                    local cmd
-                    cmd="$(echo "$args_json" | jq -r '.cmd // empty')"
-                    local blocked_pattern
-                    if ! blocked_pattern="$(validate_command "$cmd")"; then
-                        show_blocked_card "$cmd" "$blocked_pattern"
-                        log_event "blocked" "$(jq -n --arg cmd "$cmd" --arg pattern "$blocked_pattern" \
-                            '{cmd: $cmd, pattern: $pattern}')"
-                        i=$((i + 1))
-                        continue
-                    fi
-                fi
-
-                log_event "exec_start" "$(jq -n --arg tool "$tool" --arg args "$args_json" \
-                    '{tool: $tool, args: $args}')"
-                local result
-                result="$(exec_tool "$tool" "$args_json")"
-                local rc=$?
-                log_event "exec_done" "$(jq -n --arg tool "$tool" --argjson rc "$rc" --arg out "$result" \
-                    '{tool: $tool, exit_code: $rc, output: $out}')"
-                format_output "$result"
-                LAST_RESULT="$(summarize_result "$tool" "$result")"
-                i=$((i + 1))
-            done
-            ;;
-        s|S)
-            local i=0
-            while [ $i -lt "$step_count" ]; do
-                local tool args_json
-                tool="$(echo "$plan_output" | jq -r ".plan[$i].tool")"
-                args_json="$(echo "$plan_output" | jq -c ".plan[$i].args")"
-                confirm_and_exec_step "$((i+1))" "$step_count" "$tool" "$args_json"
-                local rc=$?
-                if [ $rc -eq 2 ]; then
-                    break
-                fi
-                i=$((i + 1))
-            done
-            ;;
-        e|E)
-            echo -e "${DIM}Edit not yet supported for plans. Use step-by-step mode.${RESET}"
-            ;;
-        c|C)
-            echo -e "${RED}Cancelled.${RESET}"
-            ;;
-    esac
+    confirm_and_exec "$tool" "$args"
 }
 
 # ── Built-in commands ───────────────────────────────────
@@ -781,27 +666,20 @@ run_query() {
         return 1
     fi
 
-    local step_count
-    step_count="$(echo "$plan_output" | jq '.plan | length' 2>/dev/null)" || step_count=0
-    if [ "$step_count" -eq 0 ]; then
+    local tool args_json
+    tool="$(echo "$plan_output" | jq -r '.plan[0].tool // empty')"
+    args_json="$(echo "$plan_output" | jq -c '.plan[0].args // empty')"
+    if [ -z "$tool" ]; then
         echo "Failed to parse model output." >&2
         return 1
     fi
 
-    # Execute only search steps (skip write/shell for safety in non-interactive mode)
-    local i=0
-    while [ $i -lt "$step_count" ]; do
-        local tool args_json
-        tool="$(echo "$plan_output" | jq -r ".plan[$i].tool")"
-        args_json="$(echo "$plan_output" | jq -c ".plan[$i].args")"
-        if [ "$tool" = "search" ]; then
-            local result
-            result="$(exec_tool "$tool" "$args_json")"
-            format_output "$result"
-            LAST_RESULT="$(summarize_result "$tool" "$result")"
-        fi
-        i=$((i + 1))
-    done
+    # Only execute search in non-interactive mode (skip write/shell for safety)
+    if [ "$tool" = "search" ]; then
+        local result
+        result="$(exec_tool "$tool" "$args_json")"
+        format_output "$result"
+    fi
 }
 
 # ── Direct search test mode ───────────────────────────

@@ -2,7 +2,7 @@
 Tools: read(path), write(path,content), shell(cmd), search(query)
 Use search for questions, lookups, and how-to requests.
 Use shell for commands, math, and file operations.
-Order steps so dependencies come first.
+Pick the single best tool for the request.
 
 Examples:
 <req>list files</req>
@@ -37,9 +37,6 @@ Examples:
 
 <req>how do I install docker?</req>
 {"plan":[{"tool":"search","args":{"query":"how to install docker"}}]}
-
-<req>read config.json and create a backup</req>
-{"plan":[{"tool":"read","args":{"path":"config.json"}},{"tool":"write","args":{"path":"config.json.bak","content":"backup"}}]}
 
 <req>$REQUEST</req>
 <last>$LAST</last>

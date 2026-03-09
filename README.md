@@ -102,7 +102,7 @@ bash tests.sh
 
 ## Session logs
 
-JSONL files in `logs/`, one per session. Events: `user_input`, `model_raw`, `parse_result`, `plan_shown`, `user_action`, `exec_start`, `exec_done`, `blocked`.
+JSONL files in `logs/`, one per session. Events: `user_input`, `model_raw`, `parse_result`, `user_action`, `exec_start`, `exec_done`, `blocked`.
 
 ## Project structure
 
