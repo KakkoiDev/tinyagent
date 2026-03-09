@@ -4,6 +4,8 @@ A bash REPL agent powered by a 0.5B parameter LLM running locally via llama.cpp.
 
 ~400MB total footprint. Runs on Linux, macOS, and Termux.
 
+https://github.com/user-attachments/assets/2a9a8326-bd8b-47ba-bb61-23c13f34485a
+
 ## Philosophy
 
 Most AI agents give a large model broad autonomy and hope it behaves. Tinyagent takes the opposite approach:
