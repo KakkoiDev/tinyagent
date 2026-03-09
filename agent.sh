@@ -481,6 +481,7 @@ confirm_and_exec_step() {
         echo -e " ${YELLOW}[r]un  [s]kip  [e]dit  [c]ancel${RESET}"
         printf " > "
         read -n 1 action
+        read -t 0.1 -r _ 2>/dev/null || true
         echo ""
 
         log_event "user_action" "$(jq -n --arg action "$action" --argjson step "$step_num" \
@@ -513,8 +514,11 @@ confirm_and_exec_step() {
                 esac
                 if [ -n "$edit_field" ]; then
                     edit_value="$(echo "$args_json" | jq -r ".$edit_field // empty")"
-                    echo -e " ${DIM}Edit $edit_label:${RESET}"
-                    read -e -i "$edit_value" new_value
+                    echo -e " ${DIM}Edit $edit_label (enter to keep):${RESET}"
+                    echo -e " ${DIM}$edit_value${RESET}"
+                    printf " > "
+                    read -r new_value
+                    [ -z "$new_value" ] && new_value="$edit_value"
                     if [ "$tool" = "shell" ]; then
                         local blocked_pattern
                         if ! blocked_pattern="$(validate_command "$new_value")"; then
