@@ -49,8 +49,11 @@ _ncpus() {
 }
 
 _ms_timestamp() {
-    # macOS date lacks %N; fall back to seconds
-    date +%s%3N 2>/dev/null || echo "$(date +%s)000"
+    if [[ "$OSTYPE" == darwin* ]]; then
+        python3 -c 'import time; print(int(time.time()*1000))'
+    else
+        date +%s%3N
+    fi
 }
 
 # ── Session state ───────────────────────────────────────
