@@ -49,7 +49,7 @@ flowchart TD
     A[User input] --> B[Spellcheck\noptional, aspell]
     B --> C[Build prompt\nplan.txt template + last result context]
     C --> D[Model call\n0.5B LLM + plan.gbnf grammar constraint]
-    D --> E["{"plan": [{"tool": "shell", "args": {"cmd": "ls -la"}}]}"]
+    D --> E["JSON plan output\ne.g. tool: shell, cmd: ls -la"]
     E --> F[Blocklist check\nregex patterns for dangerous commands]
     F --> G{Confirmation UI}
     G -->|Run| H[Execute tool, capture result]
