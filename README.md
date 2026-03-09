@@ -44,32 +44,19 @@ Combined with `temperature: 0`, the same input always produces the same output. 
 
 ## Pipeline
 
-```
-user input
-    |
-    v
- spellcheck (optional, aspell)
-    |
-    v
- build prompt (plan.txt template + last result context)
-    |
-    v
- model call (0.5B LLM + plan.gbnf grammar constraint)
-    |
-    v
- {"plan": [{"tool": "shell", "args": {"cmd": "ls -la"}}]}
-    |
-    v
- blocklist check (regex patterns for dangerous commands)
-    |
-    v
- confirmation UI ([r]un / [s]kip / [e]dit / [c]ancel)
-    |
-    v
- execute tool, capture result
-    |
-    v
- result fed back as context for next request
+```mermaid
+flowchart TD
+    A[User input] --> B[Spellcheck\noptional, aspell]
+    B --> C[Build prompt\nplan.txt template + last result context]
+    C --> D[Model call\n0.5B LLM + plan.gbnf grammar constraint]
+    D --> E["{"plan": [{"tool": "shell", "args": {"cmd": "ls -la"}}]}"]
+    E --> F[Blocklist check\nregex patterns for dangerous commands]
+    F --> G{Confirmation UI}
+    G -->|Run| H[Execute tool, capture result]
+    G -->|Skip| A
+    G -->|Edit| H
+    G -->|Cancel| I[Exit]
+    H --> A
 ```
 
 ## Setup
