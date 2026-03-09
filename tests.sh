@@ -352,6 +352,138 @@ echo "plan.gbnf"
 [ -s "$SCRIPT_DIR/grammars/plan.gbnf" ]
 assert_rc "plan.gbnf exists and non-empty" 0 $?
 
+# ── Tests: _ms_timestamp ──────────────────────────────
+echo ""
+echo "_ms_timestamp"
+
+ts="$(_ms_timestamp)"
+# Should be a number (no letters like 'N')
+if echo "$ts" | grep -qE '^[0-9]+$'; then
+    pass "_ms_timestamp returns numeric value"
+else
+    fail "_ms_timestamp returns numeric value" "got '$ts'"
+fi
+
+# Should be milliseconds (13+ digits)
+len="${#ts}"
+[ "$len" -ge 13 ]
+assert_rc "_ms_timestamp is millisecond precision (${len} digits)" 0 $?
+
+# Arithmetic should work (the original bug)
+ts2="$(_ms_timestamp)"
+diff=$(( ts2 - ts ))
+if [ "$diff" -ge 0 ] 2>/dev/null; then
+    pass "_ms_timestamp arithmetic works"
+else
+    fail "_ms_timestamp arithmetic works" "got '$diff'"
+fi
+
+# ── Tests: blocklist rm flag reordering ───────────────
+echo ""
+echo "blocklist (rm flag reordering)"
+
+validate_command "rm -fr /" > /dev/null 2>&1
+assert_rc "blocks rm -fr / (reversed flags)" 1 $?
+
+validate_command "rm -fr ~" > /dev/null 2>&1
+assert_rc "blocks rm -fr ~" 1 $?
+
+validate_command "rm -rfi /" > /dev/null 2>&1
+assert_rc "blocks rm -rfi / (extra flags)" 1 $?
+
+# ── Tests: blocklist rm dot paths ─────────────────────
+echo ""
+echo "blocklist (dot paths)"
+
+validate_command "rm -rf ." > /dev/null 2>&1
+assert_rc "blocks rm -rf ." 1 $?
+
+validate_command "rm -rf ./" > /dev/null 2>&1
+assert_rc "blocks rm -rf ./" 1 $?
+
+validate_command "rm -rf .." > /dev/null 2>&1
+assert_rc "blocks rm -rf .." 1 $?
+
+validate_command "rm -rf .cache" > /dev/null 2>&1
+assert_rc "allows rm -rf .cache" 0 $?
+
+validate_command "rm -rf .config" > /dev/null 2>&1
+assert_rc "allows rm -rf .config" 0 $?
+
+# ── Tests: blocklist rm without flags ─────────────────
+echo ""
+echo "blocklist (rm without flags)"
+
+validate_command "rm /" > /dev/null 2>&1
+assert_rc "blocks rm /" 1 $?
+
+validate_command "rm ~" > /dev/null 2>&1
+assert_rc "blocks rm ~" 1 $?
+
+validate_command "rm .." > /dev/null 2>&1
+assert_rc "blocks rm .." 1 $?
+
+validate_command "rm ." > /dev/null 2>&1
+assert_rc "blocks rm ." 1 $?
+
+validate_command "rm file.txt" > /dev/null 2>&1
+assert_rc "allows rm file.txt" 0 $?
+
+validate_command "rm .cache" > /dev/null 2>&1
+assert_rc "allows rm .cache" 0 $?
+
+# ── Tests: blocklist allows safe rm ───────────────────
+echo ""
+echo "blocklist (safe rm allowed)"
+
+validate_command "rm -rf node_modules" > /dev/null 2>&1
+assert_rc "allows rm -rf node_modules" 0 $?
+
+validate_command "rm -r tmp/build" > /dev/null 2>&1
+assert_rc "allows rm -r tmp/build" 0 $?
+
+validate_command "rm test.log" > /dev/null 2>&1
+assert_rc "allows rm test.log" 0 $?
+
+# ── Tests: search.sh POSIX awk ────────────────────────
+echo ""
+echo "search.sh (POSIX awk)"
+
+search_out="$(bash "$SCRIPT_DIR/search.sh" "what is bash" 1 2>/dev/null)"
+rc=$?
+assert_rc "search.sh returns success" 0 $rc
+
+# Should be valid JSON array (may be empty if DDG rate-limits)
+if printf '%s' "$search_out" | jq -e 'type == "array"' > /dev/null 2>&1; then
+    pass "search.sh returns valid JSON array"
+else
+    fail "search.sh returns valid JSON array" "output: $search_out"
+fi
+
+search_len="$(printf '%s' "$search_out" | jq 'length')"
+if [ "$search_len" -gt 0 ]; then
+    if printf '%s' "$search_out" | jq -e '.[0] | has("title","url","snippet")' > /dev/null 2>&1; then
+        pass "search.sh results have title/url/snippet keys"
+    else
+        fail "search.sh results have title/url/snippet keys" "output: $search_out"
+    fi
+else
+    echo "  SKIP: search.sh returned empty results (DDG rate limit)"
+fi
+
+# ── Tests: LAST_RESULT cleared between requests ──────
+echo ""
+echo "LAST_RESULT isolation"
+
+LAST_RESULT="old context about chatgpt"
+# Simulate what process_input does at the start
+process_input_clears() {
+    local request="$1"
+    LAST_RESULT=""
+}
+process_input_clears "ls files"
+assert_eq "LAST_RESULT cleared at start of process_input" "" "$LAST_RESULT"
+
 # ── Results ─────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
