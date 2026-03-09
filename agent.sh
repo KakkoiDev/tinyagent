@@ -604,13 +604,19 @@ process_input() {
     if [ "$corrected" != "$request" ]; then
         echo ""
         echo -e "  ${YELLOW}Did you mean:${RESET} ${BOLD}$corrected${RESET}"
-        printf "  ${YELLOW}[y]es  [n]o${RESET} "
+        printf "  ${YELLOW}[y]es  [n]o  [e]dit${RESET} "
         read -n 1 spell_action
+        read -t 0.1 -r _ 2>/dev/null || true
         echo ""
         log_event "spellcheck" "$(jq -n --arg orig "$request" --arg fix "$corrected" --arg action "$spell_action" \
             '{original: $orig, corrected: $fix, action: $action}')"
         if [ "$spell_action" = "y" ] || [ "$spell_action" = "Y" ]; then
             process_input "$corrected"
+            return
+        elif [ "$spell_action" = "e" ] || [ "$spell_action" = "E" ]; then
+            local edited
+            edited="$(zsh -c 'val="$1"; vared -p "  > " val; echo "$val"' -- "$corrected")"
+            [ -n "$edited" ] && process_input "$edited"
             return
         fi
     fi
