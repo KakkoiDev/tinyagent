@@ -514,11 +514,18 @@ confirm_and_exec_step() {
                 esac
                 if [ -n "$edit_field" ]; then
                     edit_value="$(echo "$args_json" | jq -r ".$edit_field // empty")"
-                    echo -e " ${DIM}Edit $edit_label (enter to keep):${RESET}"
-                    echo -e " ${DIM}$edit_value${RESET}"
-                    printf " > "
-                    read -r new_value
-                    [ -z "$new_value" ] && new_value="$edit_value"
+                    echo -e " ${DIM}Edit $edit_label:${RESET}"
+                    new_value="$(python3 -c "
+import readline, sys
+prefill = sys.argv[1]
+readline.set_startup_hook(lambda: readline.insert_text(prefill))
+try:
+    val = input(' > ')
+    readline.set_startup_hook()
+    print(val if val else prefill)
+except (EOFError, KeyboardInterrupt):
+    print(prefill)
+" "$edit_value")"
                     if [ "$tool" = "shell" ]; then
                         local blocked_pattern
                         if ! blocked_pattern="$(validate_command "$new_value")"; then
